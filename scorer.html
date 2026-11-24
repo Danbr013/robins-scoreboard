@@ -229,6 +229,11 @@
     <button class="big" data-act="clearbanner">Clear message</button>
     <button class="big" data-act="csv">Download score log (CSV)</button>
   </div>
+  <h3>Camera phone (Robins Live on Android)</h3>
+  <div style="display:flex;gap:14px;align-items:center">
+    <div id="cameraQr" style="background:#FAF6ED;border-radius:10px;padding:6px;flex:none;width:150px;height:150px"></div>
+    <p class="note" style="margin:0">Scan this with the camera phone, then tap <b>Open Robins Live and connect</b>. It follows this court from then on: score, break screens and Kill / Ace / Block.</p>
+  </div>
   <h3>Tubeist overlay link for this court</h3>
   <code class="url" id="overlayUrl"></code>
   <div class="grid2" style="margin-top:8px">
@@ -253,6 +258,7 @@
 <script src="js/match.js"></script>
 <script src="js/teams.js"></script>
 <script src="js/api.js"></script>
+<script src="js/qrcode.js"></script>
 <script>
 (function () {
   'use strict';
@@ -811,6 +817,25 @@
   }
 
   // ---------------------------------------------------------------- more menu
+  /** The camera-phone setup page for this court, with the scorer code in the part of the link that never reaches a server. */
+  function cameraLink() {
+    const u = new URL('camera.html', location.href);
+    u.search = 'court=' + encodeURIComponent(court);
+    u.hash = key ? 'k=' + encodeURIComponent(key) : '';
+    return u.toString();
+  }
+
+  function drawCameraQr() {
+    try {
+      const qr = qrcode(0, 'M');
+      qr.addData(cameraLink());
+      qr.make();
+      $('cameraQr').innerHTML = qr.createSvgTag({ cellSize: 4, margin: 0, scalable: true });
+      const svg = $('cameraQr').querySelector('svg');
+      if (svg) { svg.style.width = '100%'; svg.style.height = '100%'; }
+    } catch (e) { $('cameraQr').textContent = 'QR unavailable'; }
+  }
+
   function overlayLink() {
     const u = new URL('overlay.html', location.href);
     u.search = 'court=' + encodeURIComponent(court);
@@ -860,7 +885,7 @@
       case 'point': case 'minus': case 'serve': case 'timeout': act(op, side); break;
       case 'undo': undo(); break;
       case 'setup': openSetup(); break;
-      case 'menu': $('overlayUrl').textContent = overlayLink(); fillCardControls(); show('menu'); break;
+      case 'menu': $('overlayUrl').textContent = overlayLink(); fillCardControls(); drawCameraQr(); show('menu'); break;
       case 'how': chooseKind(b.dataset.kind); break;
       case 'howclose': closeHow(); break;
       case 'numonly': {

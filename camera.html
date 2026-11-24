@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#08080A">
+<title>Robins Scoreboard · Camera phone</title>
+<!--
+  Opened by scanning the "Camera phone" QR code on the scorer page (More menu).
+  On Android, the button opens Robins Live with robinslive://join?court=N&k=CODE&s=SERVICE so it follows
+  this court. On an iPhone it explains the Tubeist overlay link instead.
+-->
+<style>
+  @font-face { font-family: 'Bebas Neue'; src: url('fonts/bebas-neue.woff2') format('woff2'); }
+  @font-face { font-family: 'Barlow Condensed'; font-weight: 600; src: url('fonts/barlow-condensed-600.woff2') format('woff2'); }
+  body { margin: 0; background: #08080A; color: #FAF6ED; font: 600 19px 'Barlow Condensed', 'Arial Narrow', system-ui, sans-serif; }
+  main { max-width: 560px; margin: 0 auto; padding: calc(env(safe-area-inset-top) + 26px) 20px 40px; text-align: center; }
+  h1 { font: 400 44px 'Bebas Neue', sans-serif; letter-spacing: .03em; margin: 8px 0 6px; }
+  h1 span { color: #ECA030; }
+  p { line-height: 1.4; opacity: .92; }
+  a.go { display: block; margin: 26px 0 16px; padding: 18px; border-radius: 16px; background: #ECA030; color: #08080A;
+    font: 700 24px 'Barlow Condensed', sans-serif; text-decoration: none; }
+  .box { background: #17171c; border: 1px solid #2a2a31; border-radius: 14px; padding: 14px 16px; margin-top: 20px; text-align: left; }
+  .box b { color: #ECA030; }
+  code { display: block; word-break: break-all; background: #0f0f13; border-radius: 8px; padding: 8px; margin: 6px 0; font: 15px ui-monospace, monospace; }
+  img { width: 84px; height: 84px; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<main>
+  <img src="logos/team-robins.webp" alt="">
+  <h1>Camera phone · <span id="courtTitle">Court 1</span></h1>
+
+  <div id="android">
+    <p>Connect this phone's <b>Robins Live</b> to the club scoreboard for <b id="courtText">court 1</b>. Its score, break screens and Kill / Ace / Block animations will follow the scorer.</p>
+    <a class="go" id="open" href="#">Open Robins Live and connect</a>
+    <p style="font-size:16px;opacity:.7">Robins Live asks you to confirm. Afterwards the chip next to OFF AIR shows <b>COURT <span id="courtChip">1</span> · LINKED</b>.</p>
+  </div>
+
+  <div id="iphone" class="hidden">
+    <p>On an iPhone, film with <b>Tubeist</b>. Add this link under Settings → Overlays:</p>
+    <code id="overlayLink"></code>
+  </div>
+
+  <div class="box" id="manual">
+    <b>Doing it by hand instead</b><br>
+    In Robins Live: Settings → Shared scoreboard → turn it on, pick <b id="courtManual">Court 1</b>, type the scorer code
+    <code id="code">–</code>then tap Save. The live-score service address should be
+    <code id="service">–</code>
+  </div>
+</main>
+<script src="config.js"></script>
+<script>
+  const params = new URLSearchParams(location.search);
+  const hash = new URLSearchParams(location.hash.slice(1));
+  const court = /^[A-Za-z0-9-]{1,20}$/.test(params.get('court') || '') ? params.get('court') : '1';
+  const key = /^[A-Za-z0-9_-]{4,64}$/.test(hash.get('k') || '') ? hash.get('k') : '';
+  const $ = id => document.getElementById(id);
+  $('courtTitle').textContent = 'Court ' + court;
+  $('courtText').textContent = 'court ' + court;
+  $('courtChip').textContent = court;
+  $('courtManual').textContent = 'Court ' + court;
+  $('code').textContent = key || '(ask the club for the scorer code)';
+  // The service address travels in the link too, so the app is set up exactly like this page (the app only accepts a Google Apps Script address).
+  const backend = (window.ROBINS_CONFIG && window.ROBINS_CONFIG.backend) || '';
+  const service = /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]{20,}\/exec$/.test(backend) ? backend : '';
+  $('service').textContent = service || '(the club address built into Robins Live)';
+  const query = 'court=' + encodeURIComponent(court) + (key ? '&k=' + encodeURIComponent(key) : '') +
+    (service ? '&s=' + encodeURIComponent(service) : '');
+  const android = /Android/i.test(navigator.userAgent);
+  const ios = /iPhone|iPad|iPod/i.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  // Chrome on Android opens apps through intent: links; other browsers take the plain scheme.
+  $('open').href = android && /Chrome/i.test(navigator.userAgent)
+    ? 'intent://join?' + query + '#Intent;scheme=robinslive;package=com.robinsvbc.live;end'
+    : 'robinslive://join?' + query;
+  if (ios) {
+    $('android').classList.add('hidden');
+    $('iphone').classList.remove('hidden');
+    $('overlayLink').textContent = new URL('overlay.html?court=' + encodeURIComponent(court), location.href).toString();
+  }
+</script>
+</body>
+</html>
