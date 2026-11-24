@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Robins Scoreboard · Overlay</title>
+<!--
+  Add this page to Tubeist (Settings → Overlays) as:  overlay.html?court=1
+  The page is see-through; only the scorebug, the corner badge and banners are drawn.
+  Open with &preview=1 in a normal browser to see it over a gym-colored background,
+  and &demo=1 to see a sample match without the live-score service.
+-->
+<style>
+  @font-face { font-family: 'Bebas Neue'; src: url('fonts/bebas-neue.woff2') format('woff2'); font-display: block; }
+  @font-face { font-family: 'Barlow Condensed'; font-weight: 600; src: url('fonts/barlow-condensed-600.woff2') format('woff2'); font-display: block; }
+  html, body { margin: 0; padding: 0; background: transparent !important; overflow: hidden; width: 100%; height: 100%; }
+  body.preview { background: linear-gradient(160deg, #6b5a44 0%, #a88d62 48%, #3c4a5a 100%) !important; }
+  #stage { position: absolute; left: 0; top: 0; width: 1280px; height: 720px; transform-origin: 0 0; }
+  .abs { position: absolute; }
+  .bug { background: rgba(8, 8, 10, .88); }
+  .row { position: absolute; left: 0; display: flex; align-items: center; }
+  .stripe, .pts, .sets { position: absolute; }
+  .name, .num, .foot { position: absolute; white-space: nowrap; overflow: hidden; line-height: 1; }
+  .name, .num, .title { font-family: 'Bebas Neue', 'Oswald', 'Arial Narrow', sans-serif; }
+  .foot, .sub { font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif; font-weight: 600; }
+  .num { text-align: center; }
+  .logo { position: absolute; object-fit: contain; }
+  .stand-in { position: absolute; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    font-family: 'Bebas Neue', sans-serif; box-shadow: inset 0 0 0 2px rgba(250, 246, 237, .85); overflow: hidden; }
+  .dot { position: absolute; border-radius: 50%; background: #ECA030; }
+  .banner { overflow: hidden; background: rgba(8, 8, 10, .92); }
+  .banner .red { position: absolute; left: 0; right: 0; top: 0; height: 6px; background: #BE121C; }
+  .banner .gold { position: absolute; left: 0; right: 0; top: 6px; height: 3px; background: #ECA030; }
+  .title, .sub { position: absolute; left: 20px; right: 20px; text-align: center; white-space: nowrap; overflow: hidden; line-height: 1; }
+  .title { color: #FAF6ED; text-transform: uppercase; }
+  .sub { color: #ECA030; text-transform: uppercase; }
+  .plate { background: rgba(8, 8, 10, .82); }
+  #status { position: fixed; left: 8px; bottom: 6px; font: 600 13px system-ui, sans-serif; color: #fff; background: rgba(0,0,0,.55);
+    padding: 3px 8px; border-radius: 6px; display: none; }
+  body.preview #status { display: block; }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<div id="status">Connecting…</div>
+<script src="config.js"></script>
+<script src="js/match.js"></script>
+<script src="js/teams.js"></script>
+<script src="js/api.js"></script>
+<script>
+(function () {
+  'use strict';
+  const M = window.RobinsMatch, T = window.RobinsTeams, A = window.RobinsApi;
+  const W = 1280, H = 720;
+  const BLACK = '#08080A', GOLD = '#ECA030', CREAM = '#FAF6ED', PANEL = '#1C1C22';
+  const params = new URLSearchParams(location.search);
+  const preview = params.has('preview');
+  const demo = params.has('demo');
+  const court = A.court();
+  const stage = document.getElementById('stage');
+  const status = document.getElementById('status');
+  if (preview) document.body.classList.add('preview');
+
+  let board = null;          // last board from the service
+  let bannerUntil = 0;       // local clock time when the current banner ends (0 = until cleared)
+  let bannerKey = '';
+
+  function fitStage() {
+    const vw = document.documentElement.clientWidth || window.innerWidth;
+    const vh = document.documentElement.clientHeight || window.innerHeight;
+    const k = Math.min(vw / W, vh / H) || 1;
+    stage.style.transform = 'scale(' + k + ')';
+    stage.style.left = Math.max(0, (vw - W * k) / 2) + 'px';
+    stage.style.top = Math.max(0, (vh - H * k) / 2) + 'px';
+  }
+
+  function el(cls, css, parent) {
+    const d = document.createElement('div');
+    if (cls) d.className = cls;
+    Object.assign(d.style, css || {});
+    (parent || stage).appendChild(d);
+    return d;
+  }
+
+  function px(v) { return v + 'px'; }
+
+  /** Shrinks text until it fits, like the app's fitText. */
+  function fit(node, preferred, maxWidth) {
+    let size = preferred;
+    node.style.fontSize = px(size);
+    const limit = Math.ceil(maxWidth); // scrollWidth is a whole number of pixels
+    while (size > 10 && node.scrollWidth > limit) { size -= 1; node.style.fontSize = px(size); }
+  }
+
+  function logoNode(id, color, x, y, size, parent) {
+    const url = T.logoUrl(id);
+    if (url) {
+      const img = document.createElement('img');
+      img.className = 'logo'; img.src = url; img.alt = '';
+      Object.assign(img.style, { left: px(x), top: px(y), width: px(size), height: px(size) });
+      parent.appendChild(img);
+      return;
+    }
+    const team = T.find(id);
+    if (!team) return;
+    const disc = el('stand-in', { left: px(x), top: px(y), width: px(size), height: px(size), background: color || '#3A5A8C',
+      color: M.textOn(color || '#3A5A8C'), fontSize: px(size * 0.42) }, parent);
+    disc.textContent = T.initials(team);
+  }
+
+  function render() {
+    stage.textContent = '';
+    if (!board || !M.isValid(board.match)) return;
+    const s = board.match;
+    const st = Object.assign({ corner: 'tl', scale: 1, show: true }, board.style || {});
+    const left = st.corner === 'tl' || st.corner === 'bl';
+    const top = st.corner === 'tl' || st.corner === 'tr';
+    if (st.show !== false) drawScorebug(s, st, left, top);
+    if (st.badge) drawBadge(st, left);
+    const b = board.banner;
+    if (b && b.title && (bannerUntil === 0 || Date.now() < bannerUntil)) drawBanner(b, top || st.show === false);
+  }
+
+  function drawScorebug(s, st, left, top) {
+    const k = Math.min(1.6, Math.max(0.6, Number(st.scale) || 1));
+    const rowH = 50 * k, stripeW = 10 * k, nameW = 190 * k, dotW = 22 * k, setsW = 44 * k, ptsW = 70 * k, pad = 6 * k, footerH = 30 * k;
+    const logoW = st.homeLogo || st.awayLogo ? 48 * k : 0;
+    const totalW = stripeW + logoW + nameW + dotW + setsW + ptsW + pad * 2;
+    const totalH = rowH * 2 + footerH + pad;
+    const margin = 36;
+    const x0 = left ? margin : W - margin - totalW;
+    const y0 = top ? margin : H - margin - totalH;
+    const bug = el('abs bug', { left: px(x0), top: px(y0), width: px(totalW), height: px(totalH), borderRadius: px(10 * k) });
+
+    const sit = M.situation(s);
+    ['home', 'away'].forEach(function (side, i) {
+      const y = pad / 2 + i * rowH;
+      const color = (side === 'home' ? st.homeColor : st.awayColor) || (side === 'home' ? '#BE121C' : '#3A5A8C');
+      let x = 0;
+      el('stripe', { left: px(x + 4 * k), top: px(y + 6 * k), width: px(stripeW - 4 * k), height: px(rowH - 12 * k), background: color }, bug);
+      x += stripeW;
+      if (logoW > 0) {
+        const id = side === 'home' ? st.homeLogo : st.awayLogo;
+        if (id) logoNode(id, color, x + 5 * k, y + 3 * k, rowH - 6 * k, bug);
+        x += logoW;
+      }
+      const name = el('name', { left: px(x + 8 * k), top: px(y), height: px(rowH), lineHeight: px(rowH + 3 * k), width: px(nameW - 12 * k), color: CREAM }, bug);
+      name.textContent = M.name(s, side).toUpperCase();
+      fit(name, 40 * k, nameW - 12 * k);
+      x += nameW;
+      if (s.serving === side && !s.matchOver) {
+        const r = 6.5 * k;
+        el('dot', { left: px(x + dotW / 2 - r), top: px(y + rowH / 2 - r), width: px(r * 2), height: px(r * 2) }, bug);
+      }
+      x += dotW;
+      el('sets', { left: px(x + 2 * k), top: px(y + 6 * k), width: px(setsW - 4 * k), height: px(rowH - 12 * k), background: PANEL, borderRadius: px(4 * k) }, bug);
+      const sets = el('num', { left: px(x), top: px(y), width: px(setsW), height: px(rowH), lineHeight: px(rowH + 3 * k), fontSize: px(32 * k), color: GOLD }, bug);
+      sets.textContent = String(M.setsWon(s, side));
+      x += setsW;
+      el('pts', { left: px(x + 4 * k), top: px(y + 4 * k), width: px(ptsW - 4 * k), height: px(rowH - 8 * k), background: color, borderRadius: px(6 * k) }, bug);
+      const pts = el('num', { left: px(x + 2 * k), top: px(y), width: px(ptsW), height: px(rowH), lineHeight: px(rowH + 5 * k), fontSize: px(46 * k), color: M.textOn(color) }, bug);
+      pts.textContent = String(M.points(s, side));
+    });
+
+    // Footer: set number, previous sets or the event, and SET/MATCH POINT.
+    const fy = pad / 2 + rowH * 2;
+    const textLeft = stripeW + 8 * k;
+    const textRight = totalW - pad;
+    const setLabel = s.matchOver ? 'FINAL' : 'SET ' + s.setNumber;
+    const history = s.completedSets.map(x => x.home + '-' + x.away).join('  ');
+    const info = [setLabel, history || (st.eventTitle || '').toUpperCase()].filter(Boolean).join('  ·  ');
+    let alert = '';
+    if (s.matchOver) {
+      const w = M.matchWinner(s);
+      alert = w ? M.name(s, w).toUpperCase() + ' WIN' : 'MATCH TIED';
+    } else if (sit) {
+      alert = (sit.kind === 'MATCH_POINT' ? 'MATCH POINT ' : 'SET POINT ') + M.name(s, sit.side).toUpperCase();
+    }
+    let alertWidth = 0;
+    if (alert) {
+      const a = el('foot', { top: px(fy), height: px(footerH), lineHeight: px(footerH + 2 * k), color: GOLD, textAlign: 'right' }, bug);
+      a.textContent = alert;
+      a.style.right = px(totalW - textRight);
+      const maxA = (textRight - textLeft) * 0.55;
+      a.style.maxWidth = px(maxA);
+      fit(a, 19 * k, maxA);
+      alertWidth = Math.min(a.scrollWidth, maxA) + 12 * k;
+    }
+    const f = el('foot', { left: px(textLeft), top: px(fy), height: px(footerH), lineHeight: px(footerH + 2 * k), color: 'rgba(250,246,237,.86)' }, bug);
+    f.textContent = info;
+    const room = textRight - textLeft - alertWidth;
+    f.style.width = px(room);
+    fit(f, 19 * k, room);
+  }
+
+  /** League/region badge, like a broadcaster's corner bug, opposite the scoreboard. */
+  function drawBadge(st, scoreboardLeft) {
+    const url = T.logoUrl(st.badge);
+    if (!url) return;
+    const size = 118 * Math.min(1.6, Math.max(0.6, Number(st.scale) || 1));
+    const margin = 30;
+    const x = scoreboardLeft ? W - margin - size : margin;
+    if (st.badge.indexOf('league-') === 0) {
+      // Light lettering (the AVA mark) gets the scoreboard's dark plate so it reads over a bright gym.
+      el('abs plate', { left: px(x - 6), top: px(margin + size * 0.08), width: px(size + 12), height: px(size * 0.84), borderRadius: '12px' });
+    }
+    const img = document.createElement('img');
+    img.className = 'logo'; img.src = url; img.alt = '';
+    Object.assign(img.style, { left: px(x), top: px(margin), width: px(size), height: px(size), opacity: 0.94 });
+    stage.appendChild(img);
+  }
+
+  /** Set, match and timeout banners; at the bottom unless the scoreboard is down there. */
+  function drawBanner(b, atBottom) {
+    const w = 760, h = b.subtitle ? 104 : 72;
+    const x = (W - w) / 2;
+    const y = atBottom ? H - 56 - h : 40;
+    const panel = el('abs banner', { left: px(x), top: px(y), width: px(w), height: px(h), borderRadius: '10px' });
+    el('red', {}, panel); el('gold', {}, panel);
+    const t = el('title', { top: px(20), height: px(48), lineHeight: px(50) }, panel);
+    t.textContent = b.title.toUpperCase();
+    fit(t, 50, w - 40);
+    if (b.subtitle) {
+      const sub = el('sub', { top: px(72), height: px(26), lineHeight: px(26) }, panel);
+      sub.textContent = b.subtitle.toUpperCase();
+      fit(sub, 24, w - 40);
+    }
+  }
+
+  function accept(res) {
+    if (!res || !res.ok) return;
+    const next = res.board || null;
+    const b = next && next.banner;
+    const key = b ? b.title + '|' + b.at : '';
+    if (key !== bannerKey) {
+      bannerKey = key;
+      if (b && b.seconds > 0) {
+        const elapsed = Math.max(0, (res.now || 0) - (b.at || 0));
+        bannerUntil = Date.now() + Math.max(0, b.seconds * 1000 - elapsed);
+      } else {
+        bannerUntil = 0;
+      }
+    }
+    const changed = JSON.stringify(next) !== JSON.stringify(board);
+    board = next;
+    if (changed) {
+      try { render(); } catch (e) { stage.textContent = ''; console.log('Board not drawn: ' + e.message); }
+    }
+  }
+
+  let lastOk = 0;
+  async function poll() {
+    try {
+      accept(await A.getBoard(court));
+      lastOk = Date.now();
+      status.textContent = 'Court ' + court + ' · live';
+    } catch (e) {
+      status.textContent = e.message === 'not-configured' ? 'Live-score service not set up yet (config.js)' :
+        'Court ' + court + ' · reconnecting… (last update ' + (lastOk ? Math.round((Date.now() - lastOk) / 1000) + ' s ago' : 'never') + ')';
+    }
+    setTimeout(poll, 1200);
+  }
+
+  function demoBoard() {
+    let s = M.newMatch('Robins', 'MacDill', M.DEFAULT_FORMAT, 'home');
+    for (let i = 0; i < 25; i++) s = M.point(s, 'home').state;
+    for (let i = 0; i < 18; i++) s = M.point(s, i % 3 ? 'away' : 'home').state;
+    for (let i = 0; i < 4; i++) s = M.point(s, 'home').state;
+    const now = Date.now();
+    return { ok: true, now, board: { version: 1, match: s,
+      style: { corner: params.get('corner') || 'tl', scale: Number(params.get('scale')) || 1, show: true, homeColor: '#BE121C', awayColor: '#1B3A6B',
+        homeLogo: 'team-robins', awayLogo: params.get('away') || 'team-macdill', badge: params.get('badge') || 'league-ava', eventTitle: 'Gulf Regionals' },
+      banner: params.has('banner') ? { title: 'Robins win set 1', subtitle: 'Robins 25 – 6 MacDill', seconds: 0, at: now } : null } };
+  }
+
+  window.addEventListener('resize', function () { fitStage(); });
+  fitStage();
+  T.load().then(function () {
+    const go = function () {
+      if (demo) { accept(demoBoard()); status.textContent = 'Demo match'; } else poll();
+    };
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(go); else go();
+    // Banners that run out need a redraw even when nothing new arrives.
+    setInterval(function () { if (bannerUntil && Date.now() >= bannerUntil && board && board.banner) { bannerUntil = -1; render(); } }, 500);
+  });
+})();
+</script>
+</body>
+</html>

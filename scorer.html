@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#08080A">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Robins Scoreboard · Scorer</title>
+<style>
+  @font-face { font-family: 'Bebas Neue'; src: url('fonts/bebas-neue.woff2') format('woff2'); font-display: swap; }
+  @font-face { font-family: 'Barlow Condensed'; font-weight: 600; src: url('fonts/barlow-condensed-600.woff2') format('woff2'); font-display: swap; }
+  @font-face { font-family: 'Barlow Condensed'; font-weight: 700; src: url('fonts/barlow-condensed-700.woff2') format('woff2'); font-display: swap; }
+  :root { --black:#08080A; --red:#BE121C; --gold:#ECA030; --cream:#FAF6ED; --panel:#17171c; --panel2:#22222a; --line:#2a2a31; --away:#3A5A8C; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; min-height: 100%; background: var(--black); color: var(--cream);
+    font-family: 'Barlow Condensed', 'Roboto Condensed', 'Arial Narrow', system-ui, sans-serif; font-weight: 600; }
+  body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+  button, input, select { font: inherit; color: inherit; }
+  button { cursor: pointer; }
+  .hidden { display: none !important; }
+  header { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; font-size: 16px; letter-spacing: .05em; }
+  .pill { padding: 3px 10px; border-radius: 999px; background: var(--panel2); font-weight: 700; font-size: 14px; }
+  .pill.ok { background: #143d22; color: #8ee0a8; }
+  .pill.busy { background: #3b2f10; color: var(--gold); }
+  .pill.bad { background: #3b0d10; color: #ff8a8a; }
+  #situation { text-align: center; color: var(--gold); font-weight: 700; letter-spacing: .08em; min-height: 24px; font-size: 20px; }
+  #history { text-align: center; font-size: 16px; opacity: .85; min-height: 20px; letter-spacing: .05em; }
+  main { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; padding: 8px 12px; }
+  .team { border-radius: 18px; display: flex; flex-direction: column; overflow: hidden; background: var(--panel); }
+  .tap { flex: 1; border: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 14px 6px; min-height: 46vh; user-select: none; -webkit-user-select: none; touch-action: manipulation; }
+  .tap:active { filter: brightness(1.25); }
+  .team .logo { width: 64px; height: 64px; object-fit: contain; margin-bottom: 4px; }
+  .disc { width: 64px; height: 64px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-bottom: 4px;
+    font-family: 'Bebas Neue', sans-serif; font-size: 26px; box-shadow: inset 0 0 0 2px rgba(250,246,237,.8); }
+  .tname { font-family: 'Bebas Neue', sans-serif; font-size: 26px; letter-spacing: .04em; text-transform: uppercase; text-align: center; word-break: break-word; line-height: 1; }
+  .pts { font-family: 'Bebas Neue', sans-serif; font-size: min(32vw, 170px); line-height: .9; margin: 8px 0 2px; font-variant-numeric: tabular-nums; }
+  .sets { font-size: 17px; letter-spacing: .06em; opacity: .92; }
+  .serve { width: 14px; height: 14px; border-radius: 50%; background: var(--gold); display: inline-block; margin-left: 8px; visibility: hidden; vertical-align: middle; }
+  .serving .serve { visibility: visible; }
+  .row { display: grid; grid-template-columns: 1fr 1fr 1fr; }
+  .row button { border: 0; background: transparent; font-size: 17px; padding: 15px 4px; border-top: 1px solid var(--line); }
+  .row button + button { border-left: 1px solid var(--line); }
+  .row button:active { background: var(--line); }
+  footer { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; padding: 4px 12px 16px; }
+  footer button, .big { border: 0; border-radius: 14px; padding: 16px 8px; font-size: 18px; font-weight: 700; letter-spacing: .05em; background: var(--panel2); }
+  footer button:active, .big:active { filter: brightness(1.3); }
+  .primary { background: var(--red) !important; }
+  .gold { background: var(--gold) !important; color: var(--black) !important; }
+  #toast { position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%); background: var(--cream); color: var(--black);
+    padding: 10px 16px; border-radius: 12px; font-weight: 700; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 50; max-width: 90vw; text-align: center; }
+  #toast.show { opacity: 1; }
+
+  /* Sheets: setup, team picker, menu, key */
+  .sheet { position: fixed; inset: 0; background: var(--black); overflow-y: auto; z-index: 20;
+    padding: calc(env(safe-area-inset-top) + 8px) 14px calc(env(safe-area-inset-bottom) + 24px); }
+  .sheet h2 { font-family: 'Bebas Neue', sans-serif; font-weight: 400; font-size: 30px; letter-spacing: .04em; margin: 6px 0 10px; }
+  .sheet h3 { font-size: 15px; letter-spacing: .1em; text-transform: uppercase; color: var(--gold); margin: 18px 0 8px; }
+  .bar { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+  .link { background: none; border: 0; color: var(--gold); font-size: 18px; padding: 8px 0; }
+  .card { width: 100%; display: flex; align-items: center; gap: 12px; text-align: left; background: var(--panel); border: 1px solid var(--line);
+    border-radius: 14px; padding: 10px 12px; margin-bottom: 8px; }
+  .card img, .card .disc { width: 52px; height: 52px; flex: none; margin: 0; object-fit: contain; font-size: 20px; }
+  .card .t { font-size: 19px; line-height: 1.15; }
+  .card .s { font-size: 14px; opacity: .7; line-height: 1.2; margin-top: 2px; font-weight: 600; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip { border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 9px 14px; font-size: 16px; display: inline-flex; align-items: center; gap: 6px; }
+  .chip.on { background: var(--gold); color: var(--black); border-color: var(--gold); }
+  .chip img { width: 26px; height: 26px; object-fit: contain; }
+  label.field { display: block; margin: 10px 0; font-size: 15px; opacity: .9; }
+  input[type=text], select { width: 100%; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px; font-size: 18px; margin-top: 4px; }
+  input[type=color] { width: 100%; height: 46px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel); padding: 4px; margin-top: 4px; }
+  .teambtn { margin-bottom: 4px; }
+  .note { font-size: 15px; opacity: .75; line-height: 1.35; font-weight: 600; }
+  .stack > * { margin-bottom: 10px; width: 100%; }
+  code.url { display: block; word-break: break-all; background: var(--panel); border-radius: 10px; padding: 10px; font-size: 14px; font-family: ui-monospace, monospace; }
+  #keyInput { font-size: 22px; letter-spacing: .08em; text-align: center; }
+</style>
+</head>
+<body>
+
+<!-- Scoring screen -->
+<div id="score">
+  <header>
+    <span id="courtLabel">COURT 1</span>
+    <span id="sync" class="pill busy">CONNECTING</span>
+  </header>
+  <div id="situation"></div>
+  <div id="history"></div>
+  <main>
+    <section class="team" id="homeBox">
+      <button class="tap" id="homeTap" data-act="point" data-side="home">
+        <span id="homeLogo"></span>
+        <span class="tname"><span id="homeName">ROBINS</span><span class="serve"></span></span>
+        <span class="pts" id="homePts">0</span>
+        <span class="sets" id="homeSets">SETS 0</span>
+      </button>
+      <div class="row">
+        <button data-act="minus" data-side="home">−1</button>
+        <button data-act="serve" data-side="home">Serve</button>
+        <button data-act="timeout" data-side="home">T/O <span id="homeTo"></span></button>
+      </div>
+    </section>
+    <section class="team" id="awayBox">
+      <button class="tap" id="awayTap" data-act="point" data-side="away">
+        <span id="awayLogo"></span>
+        <span class="tname"><span id="awayName">OPPONENT</span><span class="serve"></span></span>
+        <span class="pts" id="awayPts">0</span>
+        <span class="sets" id="awaySets">SETS 0</span>
+      </button>
+      <div class="row">
+        <button data-act="minus" data-side="away">−1</button>
+        <button data-act="serve" data-side="away">Serve</button>
+        <button data-act="timeout" data-side="away">T/O <span id="awayTo"></span></button>
+      </div>
+    </section>
+  </main>
+  <footer>
+    <button data-act="undo">↶ Undo</button>
+    <button data-act="setup">Match setup</button>
+    <button data-act="menu">More</button>
+  </footer>
+</div>
+
+<!-- Match setup -->
+<div id="setup" class="sheet hidden">
+  <div class="bar"><h2>Match setup</h2><button class="link" data-act="close">Close</button></div>
+  <h3>Teams</h3>
+  <button class="card teambtn" data-act="pick" data-side="home" id="homePickBtn"></button>
+  <button class="card teambtn" data-act="pick" data-side="away" id="awayPickBtn"></button>
+  <div class="grid2">
+    <label class="field">Home name on screen<input type="text" id="homeNameIn" maxlength="22" autocomplete="off"></label>
+    <label class="field">Away name on screen<input type="text" id="awayNameIn" maxlength="22" autocomplete="off"></label>
+    <label class="field">Home color<input type="color" id="homeColorIn"></label>
+    <label class="field">Away color<input type="color" id="awayColorIn"></label>
+  </div>
+  <h3>Format</h3>
+  <select id="formatIn"></select>
+  <h3>First serve</h3>
+  <div class="chips" id="serveChips"></div>
+  <h3>Scoreboard look</h3>
+  <div class="note">Corner</div>
+  <div class="chips" id="cornerChips" style="margin:6px 0 12px"></div>
+  <div class="note">Size</div>
+  <div class="chips" id="sizeChips" style="margin:6px 0 12px"></div>
+  <div class="note">Corner badge</div>
+  <div class="chips" id="badgeChips" style="margin:6px 0 12px"></div>
+  <label class="field">Event title (shown until set 1 ends)<input type="text" id="eventIn" maxlength="40" placeholder="e.g. Gulf Regionals" autocomplete="off"></label>
+  <div class="stack" style="margin-top:18px">
+    <button class="big gold" data-act="apply">Save changes · keep the score</button>
+    <button class="big primary" data-act="newmatch">Start a new match (0–0)</button>
+  </div>
+</div>
+
+<!-- Team picker: regions first, then teams -->
+<div id="picker" class="sheet hidden">
+  <div class="bar"><h2 id="pickTitle">Pick a region</h2><button class="link" id="pickBack" data-act="pickback">Cancel</button></div>
+  <div id="pickList"></div>
+</div>
+
+<!-- More -->
+<div id="menu" class="sheet hidden">
+  <div class="bar"><h2>More</h2><button class="link" data-act="close">Close</button></div>
+  <div class="stack">
+    <button class="big" data-act="toggleshow" id="showBtn">Hide scoreboard</button>
+    <label class="field">On-screen message<input type="text" id="msgIn" maxlength="60" placeholder="e.g. Warmups · Starting soon"></label>
+    <div class="grid2">
+      <button class="big" data-act="msg" data-sec="15">Show 15 s</button>
+      <button class="big" data-act="msg" data-sec="0">Show until cleared</button>
+    </div>
+    <button class="big" data-act="clearbanner">Clear message</button>
+    <button class="big" data-act="csv">Download score log (CSV)</button>
+  </div>
+  <h3>Tubeist overlay link for this court</h3>
+  <code class="url" id="overlayUrl"></code>
+  <div class="grid2" style="margin-top:8px">
+    <button class="big" data-act="copyoverlay">Copy overlay link</button>
+    <button class="big" data-act="forgetkey">Sign out this phone</button>
+  </div>
+  <p class="note">In Tubeist: Settings → Overlays → add the link → Save. Highlights are saved with Tubeist's own Save Highlight button.</p>
+</div>
+
+<!-- Scorer code -->
+<div id="keySheet" class="sheet hidden">
+  <h2>Scorer code</h2>
+  <p class="note">Open the scorer link the club sent you, or type the scorer code here.</p>
+  <input type="text" id="keyInput" autocomplete="off" autocapitalize="off" spellcheck="false">
+  <div class="stack" style="margin-top:14px"><button class="big primary" data-act="savekey">Continue</button></div>
+  <p class="note" id="keyMsg"></p>
+</div>
+
+<div id="toast"></div>
+
+<script src="config.js"></script>
+<script src="js/match.js"></script>
+<script src="js/teams.js"></script>
+<script src="js/api.js"></script>
+<script>
+(function () {
+  'use strict';
+  const M = window.RobinsMatch, T = window.RobinsTeams, A = window.RobinsApi;
+  const $ = id => document.getElementById(id);
+  const court = A.court();
+  const LS = 'robinsScore.' + court + '.';
+  const clientId = A.store('robinsScore.client') || (function () {
+    const id = Math.random().toString(36).slice(2, 10);
+    A.store('robinsScore.client', id);
+    return id;
+  })();
+
+  // Scorer key: from the link (#k=...), then remembered on this phone.
+  let key = '';
+  const hash = new URLSearchParams(location.hash.slice(1));
+  if (hash.get('k')) {
+    key = hash.get('k');
+    A.store('robinsScore.key', key);
+    history.replaceState(null, '', location.pathname + location.search);
+  } else {
+    key = A.store('robinsScore.key') || '';
+  }
+
+  // ---------------------------------------------------------------- state
+  const DEFAULT_STYLE = { corner: 'tl', scale: 1, show: true, homeColor: '#BE121C', awayColor: '#3A5A8C',
+    homeLogo: 'team-robins', awayLogo: null, badge: 'league-ava', eventTitle: '' };
+  let match = null;            // MatchState (js/match.js)
+  let style = Object.assign({}, DEFAULT_STYLE);
+  let serverBanner = null;     // the banner the service last reported
+  let bannerToSend;            // undefined = no change, null = clear, object = show
+  let serverVersion = null;    // board version our changes build on
+  let dirty = false, saving = false, seq = 0, changes = 0;
+  let undoStack = [];
+  let events = loadEvents();
+
+  function loadEvents() { try { return JSON.parse(A.store(LS + 'log') || '[]'); } catch (e) { return []; } }
+  function saveEvents() { A.store(LS + 'log', JSON.stringify(events.slice(-2000))); }
+
+  // ---------------------------------------------------------------- helpers
+  function toast(msg) {
+    const t = $('toast'); t.textContent = msg; t.classList.add('show');
+    clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 1700);
+  }
+  function setSync(text, cls) { const s = $('sync'); s.textContent = text; s.className = 'pill ' + cls; }
+  function show(id) { ['setup', 'picker', 'menu', 'keySheet'].forEach(x => $(x).classList.toggle('hidden', x !== id)); }
+  function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+  function logoHtml(id, color, cls) {
+    const url = T.logoUrl(id);
+    if (url) return '<img class="' + (cls || 'logo') + '" src="' + url + '" alt="">';
+    const t = T.find(id);
+    if (!t) return '';
+    const c = color || t.color || '#3A5A8C';
+    return '<span class="disc" style="background:' + c + ';color:' + M.textOn(c) + '">' + esc(T.initials(t)) + '</span>';
+  }
+
+  // ---------------------------------------------------------------- scoring screen
+  function render() {
+    if (!match) return;
+    ['home', 'away'].forEach(side => {
+      const color = style[side + 'Color'] || (side === 'home' ? '#BE121C' : '#3A5A8C');
+      $(side + 'Tap').style.background = color;
+      $(side + 'Tap').style.color = M.textOn(color);
+      $(side + 'Logo').innerHTML = logoHtml(style[side + 'Logo'], color);
+      $(side + 'Name').textContent = M.name(match, side);
+      $(side + 'Pts').textContent = M.points(match, side);
+      $(side + 'Sets').textContent = 'SETS ' + M.setsWon(match, side);
+      const to = M.timeouts(match, side);
+      $(side + 'To').textContent = to ? '(' + to + ')' : '';
+      $(side + 'Box').classList.toggle('serving', match.serving === side && !match.matchOver);
+    });
+    const sit = M.situation(match);
+    let line = 'SET ' + match.setNumber + ' · ' + M.formatLabel(match.format).toUpperCase();
+    if (match.matchOver) {
+      const w = M.matchWinner(match);
+      line = 'FINAL' + (w ? ' · ' + M.name(match, w).toUpperCase() + ' WIN' : ' · MATCH TIED');
+    } else if (sit) {
+      line = (sit.kind === 'MATCH_POINT' ? 'MATCH POINT · ' : 'SET POINT · ') + M.name(match, sit.side).toUpperCase();
+    }
+    $('situation').textContent = line;
+    $('history').textContent = match.completedSets.map((x, i) => 'S' + (i + 1) + ' ' + x.home + '-' + x.away).join('   ');
+    $('showBtn').textContent = style.show === false ? 'Show scoreboard' : 'Hide scoreboard';
+  }
+
+  function record(type, side) {
+    const s = match;
+    events.push({ time: new Date().toISOString(), type, side: side || '', set: s.setNumber,
+      home: s.home, away: s.away, setsHome: M.setsWon(s, 'home'), setsAway: M.setsWon(s, 'away'),
+      serving: s.serving || '', homeName: s.homeName, awayName: s.awayName });
+    saveEvents();
+  }
+
+  /** Applies one scoring action, keeps it for undo and sends the new board. */
+  function commit(result, side) {
+    if (!result.type) return false;
+    undoStack.push({ match, style });
+    if (undoStack.length > 500) undoStack.shift();
+    match = result.state;
+    const banner = M.bannerFor(result.type, side, match);
+    if (banner) bannerToSend = banner;
+    else if (result.type === 'POINT' && currentBannerTitle().indexOf('Timeout') === 0) bannerToSend = null;
+    record(result.type, side);
+    render();
+    queueSave();
+    return true;
+  }
+
+  function currentBannerTitle() {
+    if (bannerToSend) return bannerToSend.title || '';
+    if (bannerToSend === null) return '';
+    return (serverBanner && serverBanner.title) || '';
+  }
+
+  function act(op, side) {
+    if (!match) { openSetup(); return; }
+    if (navigator.vibrate) navigator.vibrate(20);
+    switch (op) {
+      case 'point': if (!commit(M.point(match, side), side)) toast('The match is over. Start a new one in Match setup.'); break;
+      case 'minus': commit(M.removePoint(match, side), side); break;
+      case 'serve': commit(M.setServing(match, side), side); break;
+      case 'timeout': commit(M.timeout(match, side), side); break;
+    }
+  }
+
+  function undo() {
+    const prev = undoStack.pop();
+    if (!prev) { toast('Nothing to undo'); return; }
+    match = prev.match;
+    style = prev.style;
+    bannerToSend = null; // an undone set or timeout shouldn't leave its banner up
+    events.push({ time: new Date().toISOString(), type: 'UNDO', side: '', set: match.setNumber, home: match.home, away: match.away,
+      setsHome: M.setsWon(match, 'home'), setsAway: M.setsWon(match, 'away'), serving: match.serving || '', homeName: match.homeName, awayName: match.awayName });
+    saveEvents();
+    render();
+    queueSave();
+    toast('Undone');
+  }
+
+  // ---------------------------------------------------------------- saving
+  function queueSave() { changes++; dirty = true; setSync('SAVING', 'busy'); flush(); }
+
+  async function flush() {
+    if (saving || !dirty) return;
+    saving = true;
+    const mySeq = ++seq;
+    const sentChanges = changes;   // taps made while this save is in flight go out next
+    const banner = bannerToSend;
+    const body = { court, key, by: clientId, seq: mySeq, baseVersion: serverVersion, match, style };
+    if (banner !== undefined) body.banner = banner;
+    let retryIn = 0;
+    try {
+      const res = await A.post(body);
+      if (res.ok) {
+        serverVersion = res.board.version;
+        serverBanner = res.board.banner;
+        if (bannerToSend === banner) bannerToSend = undefined;
+        if (changes === sentChanges) dirty = false;
+        setSync(dirty ? 'SAVING' : 'SAVED', dirty ? 'busy' : 'ok');
+      } else if (res.error === 'conflict') {
+        if (!res.board) {
+          serverVersion = 0;                        // the court is empty there: send ours
+        } else if (res.board.by === clientId) {
+          serverVersion = res.board.version;        // our earlier save landed; send the newest again
+        } else {
+          adopt(res.board);
+          dirty = false;
+          toast('Score updated from another scorer’s phone');
+          setSync('SAVED', 'ok');
+        }
+      } else if (res.error === 'key') {
+        dirty = false;
+        setSync('NO ACCESS', 'bad');
+        askKey('That scorer code didn’t work. Check the link or ask for the current code.');
+      } else {
+        setSync('RETRYING', 'bad');
+        retryIn = 2000;
+      }
+    } catch (e) {
+      setSync(e.message === 'not-configured' ? 'NOT SET UP' : 'OFFLINE · RETRYING', 'bad');
+      retryIn = e.message === 'not-configured' ? 0 : 2500;
+    } finally {
+      saving = false;
+    }
+    if (dirty) setTimeout(flush, retryIn);
+  }
+
+  function adopt(board) {
+    serverVersion = board ? board.version : null;
+    serverBanner = board ? board.banner : null;
+    if (board && M.isValid(board.match)) {
+      match = board.match;
+      style = Object.assign({}, DEFAULT_STYLE, board.style || {});
+      undoStack = [];
+    }
+    render();
+  }
+
+  /** Picks up changes from another scorer phone when this one has nothing to send. */
+  async function refresh() {
+    if (!dirty && !saving) {
+      try {
+        const res = await A.getBoard(court);
+        if (res.ok && !dirty && !saving && res.board && res.board.version !== serverVersion) {
+          const firstLoad = serverVersion === null && match === null;
+          adopt(res.board);
+          if (!firstLoad) toast('Score updated from another scorer’s phone');
+        }
+        if (!dirty) setSync('SAVED', 'ok');
+      } catch (e) {
+        if (!dirty) setSync(e.message === 'not-configured' ? 'NOT SET UP' : 'OFFLINE', 'bad');
+      }
+    }
+    setTimeout(refresh, 5000);
+  }
+
+  // ---------------------------------------------------------------- match setup
+  let draft = null;
+
+  function openSetup() {
+    const s = match || M.newMatch('Robins', 'Opponent', M.DEFAULT_FORMAT, null);
+    draft = Object.assign({}, style, {
+      homeName: s.homeName, awayName: s.awayName, format: s.format,
+      firstServe: match ? (match.serving || '') : '',
+    });
+    fillSetup();
+    show('setup');
+  }
+
+  function teamCard(side) {
+    const id = draft[side + 'Logo'];
+    const t = T.find(id);
+    const title = t ? esc(T.withRegion(t)) : 'No team picked · ' + esc(draft[side + 'Name'] || '');
+    return logoHtml(id, draft[side + 'Color']) + '<span><span class="t">' + (side === 'home' ? 'HOME · ' : 'AWAY · ') + title +
+      '</span><span class="s" style="display:block">Tap to pick from the AVA regions</span></span>';
+  }
+
+  function chips(container, items, current, onPick) {
+    const box = $(container);
+    box.innerHTML = '';
+    items.forEach(it => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'chip' + (it.value === current ? ' on' : '');
+      b.innerHTML = (it.img ? '<img src="' + it.img + '" alt="">' : '') + esc(it.label);
+      b.onclick = () => { onPick(it.value); };
+      box.appendChild(b);
+    });
+  }
+
+  function fillSetup() {
+    $('homePickBtn').innerHTML = teamCard('home');
+    $('awayPickBtn').innerHTML = teamCard('away');
+    $('homeNameIn').value = draft.homeName;
+    $('awayNameIn').value = draft.awayName;
+    $('homeColorIn').value = draft.homeColor || '#BE121C';
+    $('awayColorIn').value = draft.awayColor || '#3A5A8C';
+    const fmt = $('formatIn');
+    fmt.innerHTML = M.PRESETS.map(p => '<option value="' + p.id + '">' + esc(p.label) + '</option>').join('');
+    const preset = M.PRESETS.find(p => M.sameFormat(p.format, draft.format));
+    fmt.value = preset ? preset.id : M.PRESETS[0].id;
+    chips('serveChips', [{ label: 'Home', value: 'home' }, { label: 'Away', value: 'away' }, { label: 'Decide later', value: '' }],
+      draft.firstServe, v => { draft.firstServe = v; fillSetup(); });
+    chips('cornerChips', [{ label: 'Top left', value: 'tl' }, { label: 'Top right', value: 'tr' }, { label: 'Bottom left', value: 'bl' }, { label: 'Bottom right', value: 'br' }],
+      draft.corner, v => { draft.corner = v; fillSetup(); });
+    chips('sizeChips', [{ label: 'Small', value: 0.85 }, { label: 'Medium', value: 1 }, { label: 'Large', value: 1.2 }],
+      Number(draft.scale) || 1, v => { draft.scale = v; fillSetup(); });
+    const badges = [{ label: 'None', value: null }];
+    const lg = T.league();
+    if (lg) badges.push({ label: lg.name, value: lg.id, img: T.logoUrl(lg.id) });
+    T.regions().forEach(r => badges.push({ label: r.name.replace(/ Region$/, ''), value: r.id, img: T.logoUrl(r.id) }));
+    chips('badgeChips', badges, draft.badge || null, v => { draft.badge = v; fillSetup(); });
+    $('eventIn').value = draft.eventTitle || '';
+  }
+
+  function readSetupFields() {
+    draft.homeName = $('homeNameIn').value.trim() || 'ROBINS';
+    draft.awayName = $('awayNameIn').value.trim() || 'OPPONENT';
+    draft.homeColor = $('homeColorIn').value;
+    draft.awayColor = $('awayColorIn').value;
+    draft.format = M.PRESETS.find(p => p.id === $('formatIn').value).format;
+    draft.eventTitle = $('eventIn').value.trim();
+  }
+
+  function draftStyle() {
+    return { corner: draft.corner, scale: Number(draft.scale) || 1, show: style.show !== false,
+      homeColor: draft.homeColor, awayColor: draft.awayColor, homeLogo: draft.homeLogo || null, awayLogo: draft.awayLogo || null,
+      badge: draft.badge || null, eventTitle: draft.eventTitle };
+  }
+
+  function applySetup(newMatch) {
+    readSetupFields();
+    if (newMatch) {
+      if (match && !match.matchOver && (match.home || match.away || match.completedSets.length) &&
+          !confirm('Start a new match? The current score goes back to 0–0.')) return;
+      if (match) undoStack.push({ match, style });
+      match = M.newMatch(draft.homeName, draft.awayName, draft.format, draft.firstServe || null);
+      style = draftStyle();
+      bannerToSend = null;
+      events = [];
+      record('NEW_MATCH', '');
+      toast('New match: ' + match.homeName + ' vs ' + match.awayName);
+    } else {
+      if (!match) { applySetup(true); return; }
+      undoStack.push({ match, style });
+      match = M.rename(match, draft.homeName, draft.awayName).state;
+      if (!M.sameFormat(match.format, draft.format)) match = Object.assign({}, match, { format: draft.format });
+      if (draft.firstServe && match.serving !== draft.firstServe) match = M.setServing(match, draft.firstServe).state;
+      style = draftStyle();
+      toast('Saved');
+    }
+    show(null);
+    render();
+    queueSave();
+  }
+
+  // ---------------------------------------------------------------- team picker
+  let pickSide = 'away', pickRegion = null;
+
+  function openPicker(side) {
+    readSetupFields();
+    pickSide = side;
+    pickRegion = null;
+    renderPicker();
+    show('picker');
+  }
+
+  function renderPicker() {
+    const list = $('pickList');
+    if (!pickRegion) {
+      $('pickTitle').textContent = (pickSide === 'home' ? 'Home' : 'Away') + ' · pick a region';
+      $('pickBack').textContent = 'Cancel';
+      let html = '';
+      T.regions().forEach(r => {
+        html += '<button class="card" data-region="' + r.id + '">' + logoHtml(r.id) + '<span><span class="t">' + esc(r.name) +
+          '</span><span class="s" style="display:block">(' + esc(T.teamNames(r.id).join(', ')) + ')</span></span></button>';
+      });
+      html += '<button class="card" data-custom="1"><span class="disc" style="background:#22222a">Aa</span><span><span class="t">No logo · type a name</span>' +
+        '<span class="s" style="display:block">For teams outside the AVA list</span></span></button>';
+      list.innerHTML = html;
+    } else {
+      const region = T.find(pickRegion);
+      $('pickTitle').textContent = region.name;
+      $('pickBack').textContent = '‹ Regions';
+      list.innerHTML = T.teamsIn(pickRegion).map(t =>
+        '<button class="card" data-team="' + t.id + '">' + logoHtml(t.id, t.color) + '<span><span class="t">' + esc(T.displayName(t)) +
+        '</span><span class="s" style="display:block">' + (t.logo ? esc(T.regionName(t) + ' Region') : 'No logo yet · shows initials') + '</span></span></button>').join('');
+    }
+  }
+
+  $('pickList').addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.region) { pickRegion = b.dataset.region; renderPicker(); window.scrollTo(0, 0); $('picker').scrollTop = 0; return; }
+    if (b.dataset.custom) {
+      draft[pickSide + 'Logo'] = null;
+      draft[pickSide + 'Name'] = '';
+      fillSetup(); show('setup');
+      setTimeout(() => $(pickSide + 'NameIn').focus(), 50);
+      return;
+    }
+    const t = T.find(b.dataset.team);
+    if (!t) return;
+    draft[pickSide + 'Logo'] = t.id;
+    draft[pickSide + 'Name'] = t.name;
+    draft[pickSide + 'Color'] = t.color || draft[pickSide + 'Color'];
+    if (pickSide === 'away' && draft.badge && draft.badge.indexOf('region-') === 0 && t.region) draft.badge = t.region;
+    fillSetup();
+    show('setup');
+  });
+
+  // ---------------------------------------------------------------- more menu
+  function overlayLink() {
+    const u = new URL('overlay.html', location.href);
+    u.search = 'court=' + encodeURIComponent(court);
+    return u.toString();
+  }
+
+  function sendBanner(b) { bannerToSend = b; queueSave(); }
+
+  function downloadCsv() {
+    const cols = ['time', 'type', 'side', 'set', 'home', 'away', 'setsHome', 'setsAway', 'serving', 'homeName', 'awayName'];
+    const q = v => { const s = String(v == null ? '' : v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+    const csv = [cols.join(',')].concat(events.map(e => cols.map(c => q(e[c])).join(','))).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const a = document.createElement('a');
+    const names = match ? (match.homeName + '-vs-' + match.awayName).replace(/[^A-Za-z0-9-]+/g, '') : 'match';
+    a.href = URL.createObjectURL(blob);
+    a.download = 'score-log-court' + court + '-' + names + '-' + new Date().toISOString().slice(0, 10) + '.csv';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  }
+
+  // ---------------------------------------------------------------- scorer code
+  function askKey(message) {
+    $('keyMsg').textContent = message || '';
+    $('keyInput').value = '';
+    show('keySheet');
+  }
+
+  async function saveKey() {
+    const k = $('keyInput').value.trim();
+    if (!k) return;
+    try {
+      const res = await A.post({ court, key: k, op: 'check' });
+      if (res.ok) { key = k; A.store('robinsScore.key', k); show(null); toast('Scorer code saved on this phone'); if (dirty) flush(); return; }
+      $('keyMsg').textContent = 'That code didn’t work.';
+    } catch (e) {
+      $('keyMsg').textContent = 'Couldn’t reach the live-score service. Check the connection and try again.';
+    }
+  }
+
+  // ---------------------------------------------------------------- wiring
+  document.addEventListener('click', e => {
+    const b = e.target.closest('[data-act]');
+    if (!b) return;
+    const op = b.dataset.act, side = b.dataset.side;
+    switch (op) {
+      case 'point': case 'minus': case 'serve': case 'timeout': act(op, side); break;
+      case 'undo': undo(); break;
+      case 'setup': openSetup(); break;
+      case 'menu': $('overlayUrl').textContent = overlayLink(); show('menu'); break;
+      case 'close': show(null); break;
+      case 'pick': openPicker(side); break;
+      case 'pickback': if (pickRegion) { pickRegion = null; renderPicker(); } else show('setup'); break;
+      case 'apply': applySetup(false); break;
+      case 'newmatch': applySetup(true); break;
+      case 'toggleshow': style = Object.assign({}, style, { show: style.show === false }); render(); queueSave(); show(null); break;
+      case 'msg': {
+        const text = $('msgIn').value.trim();
+        if (!text) { toast('Type a message first'); break; }
+        sendBanner({ title: text, subtitle: '', seconds: Number(b.dataset.sec) });
+        show(null); toast('Message on screen');
+        break;
+      }
+      case 'clearbanner': sendBanner(null); show(null); toast('Message cleared'); break;
+      case 'csv': downloadCsv(); break;
+      case 'copyoverlay':
+        (navigator.clipboard ? navigator.clipboard.writeText(overlayLink()) : Promise.reject())
+          .then(() => toast('Overlay link copied'), () => toast('Press and hold the link to copy it'));
+        break;
+      case 'forgetkey': A.store('robinsScore.key', null); key = ''; askKey('Signed out. Enter the scorer code to keep scoring on this phone.'); break;
+      case 'savekey': saveKey(); break;
+    }
+  });
+  $('keyInput').addEventListener('keydown', e => { if (e.key === 'Enter') saveKey(); });
+
+  $('courtLabel').textContent = 'COURT ' + court.toUpperCase();
+  T.load().then(async () => {
+    if (!key) askKey();
+    try {
+      const res = await A.getBoard(court);
+      if (res.ok && res.board && M.isValid(res.board.match)) adopt(res.board);
+      else serverVersion = res.ok && res.board ? res.board.version : 0;
+      setSync('SAVED', 'ok');
+    } catch (e) {
+      setSync(e.message === 'not-configured' ? 'NOT SET UP' : 'OFFLINE', 'bad');
+    }
+    if (!match && key) openSetup();
+    render();
+    setTimeout(refresh, 5000);
+  });
+})();
+</script>
+</body>
+</html>

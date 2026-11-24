@@ -1,0 +1,459 @@
+{
+ "teams": [
+  {
+   "id": "team-andrews",
+   "name": "Andrews",
+   "nickname": "Griffins",
+   "color": "#C9A24A",
+   "region": "region-atlantic",
+   "logo": true
+  },
+  {
+   "id": "team-barksdale",
+   "name": "Barksdale",
+   "nickname": "",
+   "color": "#3A5A8C",
+   "region": "region-gulf",
+   "abbr": "BAR",
+   "logo": false
+  },
+  {
+   "id": "team-beale",
+   "name": "Beale",
+   "nickname": "Volleyball Club",
+   "color": "#1E6B5C",
+   "region": "region-pacific",
+   "logo": true
+  },
+  {
+   "id": "team-buckley",
+   "name": "Buckley",
+   "nickname": "Volleyball",
+   "color": "#2849A8",
+   "region": "region-frontier",
+   "logo": true
+  },
+  {
+   "id": "team-cannon",
+   "name": "Cannon",
+   "nickname": "Commandos",
+   "color": "#1E7470",
+   "region": "region-frontier",
+   "logo": true
+  },
+  {
+   "id": "team-charleston",
+   "name": "Charleston",
+   "nickname": "Lowcountry Ironclads",
+   "color": "#1B2F5E",
+   "region": "region-atlantic",
+   "aliases": [
+    "Ironclads",
+    "Charleston AFB"
+   ],
+   "logo": true
+  },
+  {
+   "id": "team-charleston-alt",
+   "name": "Charleston",
+   "color": "#1B2F5E",
+   "nickname": "Lowcountry Ironclads",
+   "variant": "Alternate",
+   "region": "region-atlantic",
+   "logo": true
+  },
+  {
+   "id": "team-creech",
+   "name": "Creech",
+   "nickname": "Black Jack",
+   "color": "#A88A55",
+   "region": "region-pacific",
+   "logo": true
+  },
+  {
+   "id": "team-davis-monthan",
+   "name": "Davis-Monthan",
+   "nickname": "Desert Lightning Mustangs",
+   "color": "#3FB8CC",
+   "region": "region-pacific",
+   "logo": true
+  },
+  {
+   "id": "team-dover",
+   "name": "Dover",
+   "nickname": "Volleyball Club",
+   "color": "#E0407A",
+   "region": "region-atlantic",
+   "logo": true
+  },
+  {
+   "id": "team-dyess",
+   "name": "Dyess",
+   "nickname": "Strikers",
+   "color": "#7A1E2B",
+   "region": "region-frontier",
+   "logo": true
+  },
+  {
+   "id": "team-edwards",
+   "name": "Edwards",
+   "nickname": "Blackbirds",
+   "color": "#C2185B",
+   "region": "region-pacific",
+   "logo": true
+  },
+  {
+   "id": "team-eglin",
+   "name": "Eglin",
+   "nickname": "Storm",
+   "color": "#4F7A8A",
+   "region": "region-gulf",
+   "logo": true
+  },
+  {
+   "id": "team-eielson",
+   "name": "Eielson",
+   "nickname": "Arctic Wolves",
+   "color": "#1E9E5C",
+   "region": "region-mountain",
+   "logo": true
+  },
+  {
+   "id": "team-ellsworth",
+   "name": "Ellsworth",
+   "nickname": "Varsity Volleyball",
+   "color": "#E0A91B",
+   "region": "region-mountain",
+   "aliases": [
+    "Doolittle Raiders"
+   ],
+   "logo": true
+  },
+  {
+   "id": "team-fe-warren",
+   "name": "F.E. Warren",
+   "nickname": "Wranglers",
+   "color": "#24868C",
+   "region": "region-mountain",
+   "logo": true
+  },
+  {
+   "id": "team-fairchild",
+   "name": "Fairchild",
+   "nickname": "Volleyball Club",
+   "color": "#2E5C9A",
+   "region": "region-mountain",
+   "variant": "Men",
+   "aliases": [
+    "FAFB",
+    "Fairchild AFB",
+    "Stratotankers"
+   ],
+   "logo": true
+  },
+  {
+   "id": "team-fairchild-women",
+   "name": "Fairchild",
+   "color": "#6B4BA0",
+   "nickname": "Volleyball Club",
+   "variant": "Women",
+   "region": "region-mountain",
+   "logo": true
+  },
+  {
+   "id": "team-hickam",
+   "name": "Hickam",
+   "nickname": "Volleyball",
+   "color": "#2E7D3A",
+   "region": "region-pacific",
+   "logo": true
+  },
+  {
+   "id": "team-hill",
+   "name": "Hill",
+   "nickname": "Volleyball Club",
+   "color": "#7B4A2A",
+   "region": "region-mountain",
+   "logo": true
+  },
+  {
+   "id": "team-holloman",
+   "name": "Holloman",
+   "nickname": "",
+   "color": "#3A5A8C",
+   "region": "region-frontier",
+   "abbr": "HOL",
+   "logo": false
+  },
+  {
+   "id": "team-hurlburt",
+   "name": "Hurlburt",
+   "nickname": "Reapers",
+   "color": "#5C1414",
+   "region": "region-gulf",
+   "logo": true
+  },
+  {
+   "id": "team-jber",
+   "name": "JBER",
+   "nickname": "AK Elite",
+   "color": "#2B6A86",
+   "region": "region-mountain",
+   "logo": true
+  },
+  {
+   "id": "team-jbsa",
+   "name": "JBSA",
+   "nickname": "Joint Base San Antonio",
+   "color": "#22407A",
+   "region": "region-frontier",
+   "logo": true
+  },
+  {
+   "id": "team-langley",
+   "name": "Langley",
+   "nickname": "",
+   "color": "#2F6DB5",
+   "region": "region-atlantic",
+   "aliases": [
+    "Langley-Eustis",
+    "JBLE"
+   ],
+   "logo": true
+  },
+  {
+   "id": "team-little-rock",
+   "name": "Little Rock",
+   "nickname": "Black Knights",
+   "color": "#1F4FE0",
+   "region": "region-frontier",
+   "aliases": [
+    "Little Rock AFB"
+   ],
+   "logo": true
+  },
+  {
+   "id": "team-los-angeles",
+   "name": "Los Angeles",
+   "nickname": "Stars",
+   "color": "#F2C230",
+   "region": "region-pacific",
+   "logo": true
+  },
+  {
+   "id": "team-luke",
+   "name": "Luke",
+   "nickname": "Volleyball Club",
+   "color": "#6A3FA6",
+   "region": "region-pacific",
+   "logo": true
+  },
+  {
+   "id": "team-macdill",
+   "name": "MacDill",
+   "nickname": "Hurricane",
+   "color": "#1F8F8A",
+   "region": "region-gulf",
+   "logo": true
+  },
+  {
+   "id": "team-malmstrom",
+   "name": "Malmstrom",
+   "nickname": "Marmots",
+   "color": "#1C8FD0",
+   "region": "region-mountain",
+   "logo": true
+  },
+  {
+   "id": "team-maxwell",
+   "name": "Maxwell",
+   "nickname": "Eagles",
+   "color": "#3A73B8",
+   "region": "region-gulf",
+   "logo": true
+  },
+  {
+   "id": "team-mcguire",
+   "name": "McGuire",
+   "nickname": "Pegasus",
+   "color": "#1C3D7A",
+   "region": "region-atlantic",
+   "aliases": [
+    "JBMDL",
+    "Joint Base MDL",
+    "McGuire-Dix-Lakehurst"
+   ],
+   "logo": true
+  },
+  {
+   "id": "team-minot",
+   "name": "Minot",
+   "nickname": "Varsity Volleyball",
+   "color": "#2F6FB0",
+   "region": "region-mountain",
+   "logo": true
+  },
+  {
+   "id": "team-moody",
+   "name": "Moody",
+   "nickname": "Volleyball",
+   "color": "#E07A1F",
+   "region": "region-gulf",
+   "logo": true
+  },
+  {
+   "id": "team-offutt",
+   "name": "Offutt",
+   "nickname": "Warhawk Volleyball Association",
+   "color": "#2448B8",
+   "region": "region-mountain",
+   "aliases": [
+    "Warhawks",
+    "Warhawk",
+    "Offutt AFB"
+   ],
+   "logo": true
+  },
+  {
+   "id": "team-patrick",
+   "name": "Patrick",
+   "nickname": "Sharks",
+   "color": "#2E7EA6",
+   "region": "region-gulf",
+   "aliases": [
+    "Patrick SFB"
+   ],
+   "logo": true
+  },
+  {
+   "id": "team-peterson",
+   "name": "Peterson",
+   "nickname": "Pistol Pete",
+   "color": "#1E4FA0",
+   "region": "region-frontier",
+   "aliases": [
+    "Peterson SFB"
+   ],
+   "logo": true
+  },
+  {
+   "id": "team-robins",
+   "name": "Robins",
+   "nickname": "Varsity Volleyball",
+   "color": "#BE121C",
+   "region": "region-gulf",
+   "logo": true
+  },
+  {
+   "id": "team-scott",
+   "name": "Scott",
+   "nickname": "Volleyball Club",
+   "color": "#3A3A42",
+   "region": "region-atlantic",
+   "aliases": [
+    "Scott AFB"
+   ],
+   "logo": true
+  },
+  {
+   "id": "team-seymour-johnson",
+   "name": "Seymour Johnson",
+   "nickname": "Strike Eagles",
+   "color": "#1F3F6B",
+   "region": "region-atlantic",
+   "logo": true
+  },
+  {
+   "id": "team-shaw",
+   "name": "Shaw",
+   "nickname": "Viper VBC",
+   "color": "#1F6B2E",
+   "region": "region-atlantic",
+   "logo": true
+  },
+  {
+   "id": "team-tinker",
+   "name": "Tinker",
+   "nickname": "Tornados",
+   "color": "#1E88E5",
+   "region": "region-frontier",
+   "logo": true
+  },
+  {
+   "id": "team-travis",
+   "name": "Travis",
+   "nickname": "Volleyball Club",
+   "color": "#C89B2C",
+   "region": "region-pacific",
+   "logo": true
+  },
+  {
+   "id": "team-whiteman",
+   "name": "Whiteman",
+   "nickname": "",
+   "color": "#3A5A8C",
+   "region": "region-frontier",
+   "abbr": "WHI",
+   "logo": false
+  },
+  {
+   "id": "team-wright-patt",
+   "name": "Wright-Patt",
+   "nickname": "Hawks",
+   "color": "#5E6B3A",
+   "region": "region-atlantic",
+   "logo": true
+  }
+ ],
+ "regions": [
+  {
+   "id": "league-ava",
+   "name": "AVA",
+   "nickname": "Air Volleyball Association",
+   "color": "#ECA030",
+   "logo": true
+  },
+  {
+   "id": "region-atlantic",
+   "name": "Atlantic Region",
+   "nickname": "AVA",
+   "color": "#E0A030",
+   "logo": true
+  },
+  {
+   "id": "region-frontier",
+   "name": "Frontier Region",
+   "nickname": "AVA",
+   "color": "#3E9B3A",
+   "logo": true
+  },
+  {
+   "id": "region-gulf",
+   "name": "Gulf Region",
+   "nickname": "AVA",
+   "color": "#2AA8B0",
+   "logo": true
+  },
+  {
+   "id": "region-mountain",
+   "name": "Mountain Region",
+   "nickname": "AVA",
+   "color": "#3A5AA8",
+   "logo": true
+  },
+  {
+   "id": "region-pacific",
+   "name": "Pacific Region",
+   "nickname": "AVA",
+   "color": "#2AA8B0",
+   "logo": true
+  }
+ ],
+ "regionOrder": [
+  "region-pacific",
+  "region-mountain",
+  "region-frontier",
+  "region-gulf",
+  "region-atlantic"
+ ]
+}
