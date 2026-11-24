@@ -12,6 +12,8 @@
     { id: 'pool2', label: '2 sets to 25 (pool play)', format: { maxSets: 2, playAllSets: true, pointsPerSet: 25, decidingSetPoints: 25, winBy: 2, pointCap: 0, capOver: 0, timeoutsPerSet: 2 } },
     { id: 'all3', label: '3 sets, all played (25-25-15)', format: { maxSets: 3, playAllSets: true, pointsPerSet: 25, decidingSetPoints: 15, winBy: 2, pointCap: 0, capOver: 0, timeoutsPerSet: 2 } },
     { id: 'one', label: '1 set to 25', format: { maxSets: 1, playAllSets: false, pointsPerSet: 25, decidingSetPoints: 25, winBy: 2, pointCap: 0, capOver: 0, timeoutsPerSet: 2 } },
+    { id: 'one21', label: '1 set to 21', format: { maxSets: 1, playAllSets: false, pointsPerSet: 21, decidingSetPoints: 21, winBy: 2, pointCap: 0, capOver: 0, timeoutsPerSet: 2 } },
+    { id: 'one15', label: '1 set to 15', format: { maxSets: 1, playAllSets: false, pointsPerSet: 15, decidingSetPoints: 15, winBy: 2, pointCap: 0, capOver: 0, timeoutsPerSet: 2 } },
   ];
 
   const DEFAULT_FORMAT = PRESETS[0].format;
