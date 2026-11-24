@@ -61,7 +61,28 @@
     return t && t.logo ? 'logos/' + id + '.webp' : null;
   }
 
+  function norm(s) { return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, ''); }
+
+  /** True when a roster's base name ("Wright-Patterson", "F.E. Warren") is this team. */
+  function baseMatches(base, t) {
+    if (!t) return false;
+    const b = norm(base);
+    return [t.name].concat(t.aliases || []).some(n => norm(n) === b);
+  }
+
+  /** "#1B3A6B", "navy", "Royal Blue" → "#rrggbb", or '' if it isn't a color. */
+  function normColor(value) {
+    const v = String(value || '').trim();
+    if (/^#?[0-9a-f]{6}$/i.test(v)) return '#' + v.replace('#', '').toLowerCase();
+    if (!v) return '';
+    const ctx = document.createElement('canvas').getContext('2d');
+    ctx.fillStyle = '#010203';
+    ctx.fillStyle = v.replace(/\s+/g, '').toLowerCase();
+    return ctx.fillStyle === '#010203' || ctx.fillStyle.charAt(0) !== '#' ? '' : ctx.fillStyle;
+  }
+
   const api = { load, find, fullName, displayName, initials, regions, league, teamsIn, teamNames, regionName, withRegion, logoUrl,
+    baseMatches, normColor,
     get all() { return data.teams; } };
   root.RobinsTeams = api;
 })(window);

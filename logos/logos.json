@@ -402,7 +402,10 @@
    "nickname": "Hawks",
    "color": "#5E6B3A",
    "region": "region-atlantic",
-   "logo": true
+   "logo": true,
+   "aliases": [
+    "Wright-Patterson"
+   ]
   }
  ],
  "regions": [

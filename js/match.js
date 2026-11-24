@@ -164,14 +164,24 @@
     return undefined; // no change
   }
 
-  /** Cream text on dark team colors, black on light ones (gold, yellow, cyan). */
-  function textOn(hex) {
+  /** Relative luminance 0 (black) … 1 (white) of a #RRGGBB color; -1 if it isn't one. */
+  function luminance(hex) {
     const m = /^#?([0-9a-f]{6})$/i.exec(hex || '');
-    if (!m) return '#FAF6ED';
+    if (!m) return -1;
     const n = parseInt(m[1], 16);
     const lin = c => { const v = c / 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
-    const l = 0.2126 * lin((n >> 16) & 255) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255);
-    return l > 0.33 ? '#08080A' : '#FAF6ED';
+    return 0.2126 * lin((n >> 16) & 255) + 0.7152 * lin((n >> 8) & 255) + 0.0722 * lin(n & 255);
+  }
+
+  /** Cream text on dark team colors, black on light ones (gold, yellow, cyan). */
+  function textOn(hex) {
+    return luminance(hex) > 0.33 ? '#08080A' : '#FAF6ED';
+  }
+
+  /** "Julius “Buck” Tolliver" → "Tolliver", for the player card. */
+  function lastName(full) {
+    const words = String(full || '').replace(/[“"][^”"]*[”"]/g, ' ').replace(/\s+(Jr\.?|Sr\.?|II|III|IV)$/i, '').trim().split(/\s+/);
+    return words.length ? words[words.length - 1] : '';
   }
 
   /** True for a complete match state (guards against old or damaged saved boards). */
@@ -186,7 +196,7 @@
   const api = {
     PRESETS, isValid, DEFAULT_FORMAT, other, setsToWin, targetFor, isSetWon, formatLabel, sameFormat,
     newMatch, point, removePoint, setServing, timeout, rename,
-    points, name, timeouts, setsWon, situation, matchWinner, bannerFor, textOn,
+    points, name, timeouts, setsWon, situation, matchWinner, bannerFor, textOn, luminance, lastName,
   };
   root.RobinsMatch = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

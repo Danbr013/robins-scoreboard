@@ -77,6 +77,19 @@
   .stack > * { margin-bottom: 10px; width: 100%; }
   code.url { display: block; word-break: break-all; background: var(--panel); border-radius: 10px; padding: 10px; font-size: 14px; font-family: ui-monospace, monospace; }
   #keyInput { font-size: 22px; letter-spacing: .08em; text-align: center; }
+  .pill.card { background: var(--gold); color: var(--black); cursor: pointer; }
+  #how { position: fixed; left: 10px; right: 10px; top: calc(env(safe-area-inset-top) + 44px); background: #101014; border: 1px solid #33333c;
+    border-radius: 16px; padding: 10px; z-index: 15; box-shadow: 0 12px 32px rgba(0,0,0,.65); }
+  #how .q { font-size: 16px; opacity: .85; margin: 0 4px 8px; }
+  #how .opts { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+  #how button { border: 0; border-radius: 12px; padding: 14px 2px; font-size: 18px; font-weight: 700; background: var(--panel2); }
+  #how button.k { background: var(--gold); color: var(--black); }
+  .players { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .pbtn { border: 1px solid var(--line); background: var(--panel); border-radius: 12px; padding: 8px 4px 6px; text-align: center; min-height: 78px; }
+  .pbtn b { display: block; font-family: 'Bebas Neue', sans-serif; font-size: 34px; font-weight: 400; line-height: 1; }
+  .pbtn span { display: block; font-size: 16px; line-height: 1.1; }
+  .pbtn small { display: block; font-size: 12px; opacity: .6; line-height: 1.15; margin-top: 2px; }
+  .row2 { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: end; }
 </style>
 </head>
 <body>
@@ -85,6 +98,7 @@
 <div id="score">
   <header>
     <span id="courtLabel">COURT 1</span>
+    <span id="cardPill" class="pill card hidden" data-act="hidecard">BREAK SCREEN ON · HIDE</span>
     <span id="sync" class="pill busy">CONNECTING</span>
   </header>
   <div id="situation"></div>
@@ -124,12 +138,43 @@
   </footer>
 </div>
 
+<!-- After a point: how was it won? -->
+<div id="how" class="hidden">
+  <div class="q" id="howQ">How did they score?</div>
+  <div class="opts">
+    <button class="k" data-act="how" data-kind="KILL">Kill</button>
+    <button class="k" data-act="how" data-kind="ACE" id="howAce">Ace</button>
+    <button class="k" data-act="how" data-kind="BLOCK">Block</button>
+    <button data-act="how" data-kind="OPP_ERROR">Error</button>
+    <button data-act="howclose">✕</button>
+  </div>
+</div>
+
+<!-- Who made the play? -->
+<div id="players" class="sheet hidden">
+  <div class="bar"><h2 id="playersTitle">Who?</h2><button class="link" data-act="close">Cancel</button></div>
+  <div class="players" id="playerList"></div>
+  <p class="note" id="rosterNote"></p>
+  <div class="row2" style="margin-top:12px">
+    <label class="field" style="margin:0">Number only (not on the list)<input type="text" id="numIn" inputmode="numeric" maxlength="3" autocomplete="off"></label>
+    <button class="big" data-act="numonly">Use #</button>
+  </div>
+  <div class="stack" style="margin-top:12px">
+    <button class="big" data-act="noplayer">No player · just the play</button>
+    <button class="big" data-act="rosterrefresh">Reload rosters from the Team Hub</button>
+  </div>
+</div>
+
 <!-- Match setup -->
 <div id="setup" class="sheet hidden">
   <div class="bar"><h2>Match setup</h2><button class="link" data-act="close">Close</button></div>
+  <h3>Division</h3>
+  <div class="chips" id="divisionChips"></div>
   <h3>Teams</h3>
   <button class="card teambtn" data-act="pick" data-side="home" id="homePickBtn"></button>
+  <div class="chips" id="homeKits" style="margin:2px 0 10px"></div>
   <button class="card teambtn" data-act="pick" data-side="away" id="awayPickBtn"></button>
+  <div class="chips" id="awayKits" style="margin:2px 0 10px"></div>
   <div class="grid2">
     <label class="field">Home name on screen<input type="text" id="homeNameIn" maxlength="22" autocomplete="off"></label>
     <label class="field">Away name on screen<input type="text" id="awayNameIn" maxlength="22" autocomplete="off"></label>
@@ -163,6 +208,17 @@
 <!-- More -->
 <div id="menu" class="sheet hidden">
   <div class="bar"><h2>More</h2><button class="link" data-act="close">Close</button></div>
+  <h3 style="margin-top:4px">Break screen</h3>
+  <div class="chips" id="cardTypeChips" style="margin-bottom:10px"></div>
+  <div class="note">Countdown</div>
+  <div class="chips" id="cardTimeChips" style="margin:6px 0 10px"></div>
+  <label class="field">Message (optional)<input type="text" id="cardMsgIn" maxlength="80" placeholder="e.g. Next up: Women's vs Eglin, 2:30 pm"></label>
+  <div class="grid2">
+    <button class="big gold" data-act="showcard">Show break screen</button>
+    <button class="big" data-act="hidecard">Hide it</button>
+  </div>
+  <p class="note">It covers the whole picture until you hide it. Starting soon, set break, timeout and be right back hide by themselves on the next point.</p>
+  <h3>Scoreboard</h3>
   <div class="stack">
     <button class="big" data-act="toggleshow" id="showBtn">Hide scoreboard</button>
     <label class="field">On-screen message<input type="text" id="msgIn" maxlength="60" placeholder="e.g. Warmups · Starting soon"></label>
@@ -232,6 +288,14 @@
   let dirty = false, saving = false, seq = 0, changes = 0;
   let undoStack = [];
   let events = loadEvents();
+  let serverCard = null;       // the break screen the service last reported
+  let cardToSend;              // undefined = no change, null = hide, object = show
+  let playToSend;              // a kill/ace/block to animate (sent once)
+  let rosters = null;          // names and numbers from the Team Hub (via the service)
+  let rosterError = '';
+  let how = null;              // the point being described: { side, eventIndex, canAce }
+  let howTimer = null;
+  let cardDraft = { type: 'break', seconds: 0 };
 
   function loadEvents() { try { return JSON.parse(A.store(LS + 'log') || '[]'); } catch (e) { return []; } }
   function saveEvents() { A.store(LS + 'log', JSON.stringify(events.slice(-2000))); }
@@ -242,7 +306,7 @@
     clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 1700);
   }
   function setSync(text, cls) { const s = $('sync'); s.textContent = text; s.className = 'pill ' + cls; }
-  function show(id) { ['setup', 'picker', 'menu', 'keySheet'].forEach(x => $(x).classList.toggle('hidden', x !== id)); }
+  function show(id) { ['setup', 'picker', 'menu', 'keySheet', 'players'].forEach(x => $(x).classList.toggle('hidden', x !== id)); }
   function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
   function logoHtml(id, color, cls) {
@@ -280,29 +344,39 @@
     $('situation').textContent = line;
     $('history').textContent = match.completedSets.map((x, i) => 'S' + (i + 1) + ' ' + x.home + '-' + x.away).join('   ');
     $('showBtn').textContent = style.show === false ? 'Show scoreboard' : 'Hide scoreboard';
+    $('cardPill').classList.toggle('hidden', !currentCard());
+  }
+
+  function currentCard() {
+    if (cardToSend === null) return null;
+    return cardToSend || serverCard || null;
   }
 
   function record(type, side) {
     const s = match;
     events.push({ time: new Date().toISOString(), type, side: side || '', set: s.setNumber,
       home: s.home, away: s.away, setsHome: M.setsWon(s, 'home'), setsAway: M.setsWon(s, 'away'),
-      serving: s.serving || '', homeName: s.homeName, awayName: s.awayName });
+      serving: s.serving || '', homeName: s.homeName, awayName: s.awayName, kind: '', number: '', player: '' });
     saveEvents();
+    return events.length - 1;
   }
 
   /** Applies one scoring action, keeps it for undo and sends the new board. */
   function commit(result, side) {
-    if (!result.type) return false;
+    if (!result.type) return -1;
     undoStack.push({ match, style });
     if (undoStack.length > 500) undoStack.shift();
     match = result.state;
     const banner = M.bannerFor(result.type, side, match);
     if (banner) bannerToSend = banner;
     else if (result.type === 'POINT' && currentBannerTitle().indexOf('Timeout') === 0) bannerToSend = null;
-    record(result.type, side);
+    const scored = result.type === 'POINT' || result.type === 'SET_END' || result.type === 'MATCH_END';
+    const card = currentCard();
+    if (scored && card && ['soon', 'break', 'timeout', 'brb'].indexOf(card.type) >= 0) cardToSend = null; // play resumed
+    const index = record(result.type, side);
     render();
     queueSave();
-    return true;
+    return index;
   }
 
   function currentBannerTitle() {
@@ -315,7 +389,13 @@
     if (!match) { openSetup(); return; }
     if (navigator.vibrate) navigator.vibrate(20);
     switch (op) {
-      case 'point': if (!commit(M.point(match, side), side)) toast('The match is over. Start a new one in Match setup.'); break;
+      case 'point': {
+        const servedBefore = match.serving;
+        const index = commit(M.point(match, side), side);
+        if (index < 0) toast('The match is over. Start a new one in Match setup.');
+        else askHow(side, index, servedBefore === side);
+        break;
+      }
       case 'minus': commit(M.removePoint(match, side), side); break;
       case 'serve': commit(M.setServing(match, side), side); break;
       case 'timeout': commit(M.timeout(match, side), side); break;
@@ -323,6 +403,7 @@
   }
 
   function undo() {
+    closeHow();
     const prev = undoStack.pop();
     if (!prev) { toast('Nothing to undo'); return; }
     match = prev.match;
@@ -344,16 +425,22 @@
     saving = true;
     const mySeq = ++seq;
     const sentChanges = changes;   // taps made while this save is in flight go out next
-    const banner = bannerToSend;
+    const banner = bannerToSend, card = cardToSend, play = playToSend;
     const body = { court, key, by: clientId, seq: mySeq, baseVersion: serverVersion, match, style };
     if (banner !== undefined) body.banner = banner;
+    if (card !== undefined) body.card = card;
+    if (play !== undefined) body.play = play;
     let retryIn = 0;
     try {
       const res = await A.post(body);
       if (res.ok) {
         serverVersion = res.board.version;
         serverBanner = res.board.banner;
+        serverCard = res.board.card;
         if (bannerToSend === banner) bannerToSend = undefined;
+        if (cardToSend === card) cardToSend = undefined;
+        if (playToSend === play) playToSend = undefined;
+        render();
         if (changes === sentChanges) dirty = false;
         setSync(dirty ? 'SAVING' : 'SAVED', dirty ? 'busy' : 'ok');
       } else if (res.error === 'conflict') {
@@ -387,6 +474,7 @@
   function adopt(board) {
     serverVersion = board ? board.version : null;
     serverBanner = board ? board.banner : null;
+    serverCard = board ? board.card : null;
     if (board && M.isValid(board.match)) {
       match = board.match;
       style = Object.assign({}, DEFAULT_STYLE, board.style || {});
@@ -441,15 +529,43 @@
       const b = document.createElement('button');
       b.type = 'button';
       b.className = 'chip' + (it.value === current ? ' on' : '');
-      b.innerHTML = (it.img ? '<img src="' + it.img + '" alt="">' : '') + esc(it.label);
-      b.onclick = () => { onPick(it.value); };
+      b.innerHTML = (it.img ? '<img src="' + it.img + '" alt="">' : '') +
+        (it.swatch ? '<span style="width:18px;height:18px;border-radius:5px;display:inline-block;background:' + it.swatch +
+          ';box-shadow:inset 0 0 0 1px rgba(250,246,237,.5)' + (it.accent ? ',inset 0 -6px 0 ' + it.accent : '') + '"></span>' : '') + esc(it.label);
+      b.onclick = () => { if (draft && !$('setup').classList.contains('hidden')) readSetupFields(); onPick(it.value); };
       box.appendChild(b);
     });
+  }
+
+  /** Jersey colors from the Team Hub's Jersey Colors tab for a team, plus its logo colors. */
+  function kitsFor(side) {
+    const t = T.find(draft[side + 'Logo']);
+    if (!t) return [];
+    const div = { men: 'men', women: 'women', coed: 'coed' }[draft.division] || 'men';
+    const list = ((rosters && rosters.kits) || []).filter(k => T.baseMatches(k.base, t) &&
+      (!k.division || /^all$/i.test(k.division) || k.division.toLowerCase().replace(/[^a-z]/g, '').indexOf(div) === 0))
+      .map(k => ({ name: k.name || 'Jersey', color: T.normColor(k.color), accent: T.normColor(k.accent) }))
+      .filter(k => k.color);
+    return list.concat([{ name: 'Logo colors', color: t.color || '#3A5A8C', accent: '' }]);
+  }
+
+  function fillKits(side) {
+    const kits = kitsFor(side);
+    chips(side + 'Kits', kits.map(k => ({ label: k.name, value: k.name, swatch: k.color, accent: k.accent })),
+      draft[side + 'Kit'] || null, v => {
+        const k = kits.find(x => x.name === v);
+        draft[side + 'Kit'] = v; draft[side + 'Color'] = k.color; draft[side + 'Accent'] = k.accent || '';
+        fillSetup();
+      });
   }
 
   function fillSetup() {
     $('homePickBtn').innerHTML = teamCard('home');
     $('awayPickBtn').innerHTML = teamCard('away');
+    chips('divisionChips', [{ label: 'Men', value: 'men' }, { label: 'Women', value: 'women' }, { label: 'Co-Ed', value: 'coed' }],
+      draft.division || 'men', v => { draft.division = v; fillSetup(); });
+    fillKits('home');
+    fillKits('away');
     $('homeNameIn').value = draft.homeName;
     $('awayNameIn').value = draft.awayName;
     $('homeColorIn').value = draft.homeColor || '#BE121C';
@@ -475,16 +591,21 @@
   function readSetupFields() {
     draft.homeName = $('homeNameIn').value.trim() || 'ROBINS';
     draft.awayName = $('awayNameIn').value.trim() || 'OPPONENT';
-    draft.homeColor = $('homeColorIn').value;
-    draft.awayColor = $('awayColorIn').value;
+    ['home', 'away'].forEach(side => {
+      const v = $(side + 'ColorIn').value;
+      if (v && v.toLowerCase() !== String(draft[side + 'Color'] || '').toLowerCase()) {   // picked by hand
+        draft[side + 'Color'] = v; draft[side + 'Accent'] = ''; draft[side + 'Kit'] = null;
+      }
+    });
     draft.format = M.PRESETS.find(p => p.id === $('formatIn').value).format;
     draft.eventTitle = $('eventIn').value.trim();
   }
 
   function draftStyle() {
     return { corner: draft.corner, scale: Number(draft.scale) || 1, show: style.show !== false,
-      homeColor: draft.homeColor, awayColor: draft.awayColor, homeLogo: draft.homeLogo || null, awayLogo: draft.awayLogo || null,
-      badge: draft.badge || null, eventTitle: draft.eventTitle };
+      homeColor: draft.homeColor, awayColor: draft.awayColor, homeAccent: draft.homeAccent || '', awayAccent: draft.awayAccent || '',
+      homeKit: draft.homeKit || null, awayKit: draft.awayKit || null, division: draft.division || 'men',
+      homeLogo: draft.homeLogo || null, awayLogo: draft.awayLogo || null, badge: draft.badge || null, eventTitle: draft.eventTitle };
   }
 
   function applySetup(newMatch) {
@@ -563,10 +684,131 @@
     draft[pickSide + 'Logo'] = t.id;
     draft[pickSide + 'Name'] = t.name;
     draft[pickSide + 'Color'] = t.color || draft[pickSide + 'Color'];
+    draft[pickSide + 'Accent'] = '';
+    draft[pickSide + 'Kit'] = 'Logo colors';
     if (pickSide === 'away' && draft.badge && draft.badge.indexOf('region-') === 0 && t.region) draft.badge = t.region;
     fillSetup();
     show('setup');
   });
+
+  // ---------------------------------------------------------------- how the point was won
+  const KIND_LABEL = { KILL: 'Kill', ACE: 'Ace', BLOCK: 'Block', OPP_ERROR: 'Opponent error' };
+
+  function askHow(side, eventIndex, canAce) {
+    how = { side, eventIndex, canAce };
+    $('howQ').textContent = 'How did ' + M.name(match, side).toUpperCase() + ' score?';
+    $('howAce').classList.toggle('hidden', !canAce);
+    document.querySelector('#how .opts').style.gridTemplateColumns = 'repeat(' + (canAce ? 5 : 4) + ', 1fr)';
+    $('how').classList.remove('hidden');
+    clearTimeout(howTimer);
+    howTimer = setTimeout(closeHow, 9000);
+  }
+  function closeHow() { clearTimeout(howTimer); $('how').classList.add('hidden'); }
+
+  function chooseKind(kind) {
+    closeHow();
+    if (!how) return;
+    how.kind = kind;
+    if (kind === 'OPP_ERROR') { tagEvent('', ''); toast('Logged as an opponent error'); return; }
+    openPlayers();
+  }
+
+  function tagEvent(number, player) {
+    const e = events[how.eventIndex];
+    if (e) { e.kind = how.kind; e.number = number || ''; e.player = player || ''; saveEvents(); }
+  }
+
+  /** The players for one side: Robins from the Robins Rosters tab, everyone else from League Rosters. */
+  function rosterFor(side) {
+    const t = T.find(style[side + 'Logo']);
+    if (!rosters || !t) return [];
+    const div = style.division || 'men';
+    let list;
+    if (t.id === 'team-robins') {
+      list = (rosters.robins[div] || []).map(r => ({ num: r[0], name: r[1], note: r[3] ? r[3] + ' · ' + (r[2] || '') : (r[2] || '') }));
+    } else {
+      const want = div === 'women' ? 'W' : 'M';
+      list = rosters.league.filter(r => T.baseMatches(r[0], t) && (div === 'coed' ? r[4] === 1 : r[1] === want))
+        .map(r => ({ num: r[2], name: r[3], note: div === 'coed' ? (r[1] === 'W' ? 'Women' : 'Men') : '' }));
+    }
+    const n = v => (/^\d+$/.test(v) ? Number(v) : 999);
+    return list.sort((a, b) => n(a.num) - n(b.num) || a.name.localeCompare(b.name));
+  }
+
+  function openPlayers() {
+    const side = how.side;
+    $('playersTitle').textContent = KIND_LABEL[how.kind] + ' · ' + M.name(match, side).toUpperCase() + ' · who?';
+    const list = rosterFor(side);
+    const counts = {};
+    list.forEach(p => { counts[p.num] = (counts[p.num] || 0) + 1; });
+    $('playerList').innerHTML = list.map((p, i) =>
+      '<button class="pbtn" data-player="' + i + '"><b>' + (p.num ? esc(p.num) : '–') + '</b><span>' + esc(M.lastName(p.name)) + '</span><small>' +
+      esc(p.name) + (counts[p.num] > 1 && p.num ? ' · same #' : '') + (p.note ? ' · ' + esc(p.note) : '') + '</small></button>').join('');
+    $('playerList')._list = list;
+    const t = T.find(style[side + 'Logo']);
+    $('rosterNote').textContent = !t ? 'No AVA team picked for this side, so there is no roster. Use the number box.' :
+      rosterError ? 'Rosters didn’t load (' + rosterError + '). Use the number box.' :
+      !rosters ? 'Loading rosters…' : list.length ? 'From the Team Hub. Wrong number? Use the box, then fix it in the Team Hub.' :
+      'No ' + ({ men: 'men’s', women: 'women’s', coed: 'co-ed' }[style.division || 'men']) + ' roster for this team in the Team Hub.';
+    $('numIn').value = '';
+    show('players');
+  }
+
+  function sendPlay(number, name) {
+    tagEvent(number, name);
+    playToSend = { kind: how.kind, side: how.side, number: number || '', name: name ? M.lastName(name) : '',
+      id: Math.random().toString(36).slice(2, 10) };
+    show(null);
+    queueSave();
+    toast(KIND_LABEL[how.kind] + (number ? ' · #' + number : '') + (name ? ' ' + M.lastName(name) : '') + ' on screen');
+  }
+
+  $('playerList').addEventListener('click', e => {
+    const b = e.target.closest('[data-player]');
+    if (!b) return;
+    const p = $('playerList')._list[Number(b.dataset.player)];
+    sendPlay(p.num, p.name);
+  });
+
+  async function loadRosters(force) {
+    if (!key) return;
+    try {
+      // baseVersion -1 makes a version-1 service refuse this as a save (conflict) instead of storing it.
+      const res = await A.post({ court, key, op: 'rosters', refresh: !!force, baseVersion: -1 }, 30000);
+      if (res.ok && res.league) { rosters = res; rosterError = ''; }
+      else rosterError = res.error === 'key' ? 'scorer code' : 'the service needs the version 2 update';
+    } catch (e) { rosterError = 'no connection'; }
+    if (!$('players').classList.contains('hidden')) openPlayers();
+    if (draft && !$('setup').classList.contains('hidden')) { readSetupFields(); fillSetup(); }
+  }
+
+  // ---------------------------------------------------------------- break screen
+  const CARD_TYPES = [{ label: 'Starting soon', value: 'soon' }, { label: 'Set break', value: 'break' }, { label: 'Timeout', value: 'timeout' },
+    { label: 'Be right back', value: 'brb' }, { label: 'Final', value: 'final' }];
+
+  function fillCardControls() {
+    chips('cardTypeChips', CARD_TYPES, cardDraft.type, v => { cardDraft.type = v; fillCardControls(); });
+    chips('cardTimeChips', [{ label: 'None', value: 0 }, { label: '1 min', value: 60 }, { label: '2 min', value: 120 }, { label: '3 min', value: 180 },
+      { label: '5 min', value: 300 }, { label: '10 min', value: 600 }], cardDraft.seconds, v => { cardDraft.seconds = v; fillCardControls(); });
+  }
+
+  function showCard() {
+    if (!match) { toast('Set up the match first'); return; }
+    cardToSend = { type: cardDraft.type, title: '', message: $('cardMsgIn').value.trim(), seconds: cardDraft.seconds };
+    render();
+    queueSave();
+    show(null);
+    toast('Break screen on');
+  }
+
+  function hideCard() {
+    if (!currentCard()) { show(null); return; }
+    cardToSend = null;
+    render();
+    queueSave();
+    show(null);
+    toast('Break screen off');
+  }
 
   // ---------------------------------------------------------------- more menu
   function overlayLink() {
@@ -578,7 +820,7 @@
   function sendBanner(b) { bannerToSend = b; queueSave(); }
 
   function downloadCsv() {
-    const cols = ['time', 'type', 'side', 'set', 'home', 'away', 'setsHome', 'setsAway', 'serving', 'homeName', 'awayName'];
+    const cols = ['time', 'type', 'side', 'kind', 'number', 'player', 'set', 'home', 'away', 'setsHome', 'setsAway', 'serving', 'homeName', 'awayName'];
     const q = v => { const s = String(v == null ? '' : v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
     const csv = [cols.join(',')].concat(events.map(e => cols.map(c => q(e[c])).join(','))).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
@@ -602,7 +844,7 @@
     if (!k) return;
     try {
       const res = await A.post({ court, key: k, op: 'check' });
-      if (res.ok) { key = k; A.store('robinsScore.key', k); show(null); toast('Scorer code saved on this phone'); if (dirty) flush(); return; }
+      if (res.ok) { key = k; A.store('robinsScore.key', k); show(null); toast('Scorer code saved on this phone'); if (dirty) flush(); loadRosters(false); return; }
       $('keyMsg').textContent = 'That code didn’t work.';
     } catch (e) {
       $('keyMsg').textContent = 'Couldn’t reach the live-score service. Check the connection and try again.';
@@ -618,7 +860,19 @@
       case 'point': case 'minus': case 'serve': case 'timeout': act(op, side); break;
       case 'undo': undo(); break;
       case 'setup': openSetup(); break;
-      case 'menu': $('overlayUrl').textContent = overlayLink(); show('menu'); break;
+      case 'menu': $('overlayUrl').textContent = overlayLink(); fillCardControls(); show('menu'); break;
+      case 'how': chooseKind(b.dataset.kind); break;
+      case 'howclose': closeHow(); break;
+      case 'numonly': {
+        const n = $('numIn').value.replace(/[^0-9]/g, '');
+        if (!n) { toast('Type the jersey number'); break; }
+        sendPlay(n, '');
+        break;
+      }
+      case 'noplayer': sendPlay('', ''); break;
+      case 'rosterrefresh': $('rosterNote').textContent = 'Reloading…'; loadRosters(true); break;
+      case 'showcard': showCard(); break;
+      case 'hidecard': hideCard(); break;
       case 'close': show(null); break;
       case 'pick': openPicker(side); break;
       case 'pickback': if (pickRegion) { pickRegion = null; renderPicker(); } else show('setup'); break;
@@ -657,6 +911,7 @@
     }
     if (!match && key) openSetup();
     render();
+    loadRosters(false);
     setTimeout(refresh, 5000);
   });
 })();

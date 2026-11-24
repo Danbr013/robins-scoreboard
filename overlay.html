@@ -6,27 +6,29 @@
 <title>Robins Scoreboard · Overlay</title>
 <!--
   Add this page to Tubeist (Settings → Overlays) as:  overlay.html?court=1
-  The page is see-through; only the scorebug, the corner badge and banners are drawn.
-  Open with &preview=1 in a normal browser to see it over a gym-colored background,
-  and &demo=1 to see a sample match without the live-score service.
+  The page is see-through; it draws the scorebug, the corner badge, banners, stat animations
+  and full-screen break cards. Open with &preview=1 in a browser to see it over a gym-colored
+  background, and &demo=1 (plus &card=break or &play=ace) for sample graphics without the service.
+
+  Tubeist only re-captures the page when something changes or an animation runs, as long as the
+  page has no <img> tags and no url() in its CSS. So logos are SVG <image> elements and the
+  fonts are loaded from script.
 -->
 <style>
-  @font-face { font-family: 'Bebas Neue'; src: url('fonts/bebas-neue.woff2') format('woff2'); font-display: block; }
-  @font-face { font-family: 'Barlow Condensed'; font-weight: 600; src: url('fonts/barlow-condensed-600.woff2') format('woff2'); font-display: block; }
   html, body { margin: 0; padding: 0; background: transparent !important; overflow: hidden; width: 100%; height: 100%; }
   body.preview { background: linear-gradient(160deg, #6b5a44 0%, #a88d62 48%, #3c4a5a 100%) !important; }
   #stage { position: absolute; left: 0; top: 0; width: 1280px; height: 720px; transform-origin: 0 0; }
+  #stage > div { position: absolute; inset: 0; }
   .abs { position: absolute; }
   .bug { background: rgba(8, 8, 10, .88); }
-  .row { position: absolute; left: 0; display: flex; align-items: center; }
   .stripe, .pts, .sets { position: absolute; }
   .name, .num, .foot { position: absolute; white-space: nowrap; overflow: hidden; line-height: 1; }
-  .name, .num, .title { font-family: 'Bebas Neue', 'Oswald', 'Arial Narrow', sans-serif; }
-  .foot, .sub { font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif; font-weight: 600; }
+  .d { font-family: 'Bebas Neue', 'Oswald', 'Arial Narrow', sans-serif; }
+  .c { font-family: 'Barlow Condensed', 'Arial Narrow', sans-serif; font-weight: 600; }
   .num { text-align: center; }
-  .logo { position: absolute; object-fit: contain; }
+  svg.logo { position: absolute; overflow: visible; }
   .stand-in { position: absolute; border-radius: 50%; display: flex; align-items: center; justify-content: center;
-    font-family: 'Bebas Neue', sans-serif; box-shadow: inset 0 0 0 2px rgba(250, 246, 237, .85); overflow: hidden; }
+    box-shadow: inset 0 0 0 2px rgba(250, 246, 237, .85); overflow: hidden; }
   .dot { position: absolute; border-radius: 50%; background: #ECA030; }
   .banner { overflow: hidden; background: rgba(8, 8, 10, .92); }
   .banner .red { position: absolute; left: 0; right: 0; top: 0; height: 6px; background: #BE121C; }
@@ -35,13 +37,40 @@
   .title { color: #FAF6ED; text-transform: uppercase; }
   .sub { color: #ECA030; text-transform: uppercase; }
   .plate { background: rgba(8, 8, 10, .82); }
+  @keyframes pop { 0% { transform: scale(1); } 35% { transform: scale(1.22); } 100% { transform: scale(1); } }
+  .pop { animation: pop .45s ease-out; }
+
+  /* Stat play (kill / ace / block): opens beside the scorebug, then closes. */
+  .fx { overflow: hidden; border-radius: 10px; }
+  .fx.l { animation: openL 4.4s cubic-bezier(.2,.8,.2,1) forwards; }
+  .fx.r { animation: openR 4.4s cubic-bezier(.2,.8,.2,1) forwards; }
+  @keyframes openL { 0% { clip-path: inset(0 100% 0 0); } 9% { clip-path: inset(0 0 0 0); } 88% { clip-path: inset(0 0 0 0); } 100% { clip-path: inset(0 100% 0 0); } }
+  @keyframes openR { 0% { clip-path: inset(0 0 0 100%); } 9% { clip-path: inset(0 0 0 0); } 88% { clip-path: inset(0 0 0 0); } 100% { clip-path: inset(0 0 0 100%); } }
+  .fx .slash { position: absolute; top: -20%; bottom: -20%; width: 34%; background: #ECA030; transform: skewX(-18deg); left: -60%;
+    animation: slash .9s ease-in-out .12s forwards; opacity: .95; }
+  @keyframes slash { 0% { left: -60%; } 100% { left: 130%; } }
+  .fx .word { position: absolute; left: 0; right: 0; text-align: center; white-space: nowrap; letter-spacing: .02em;
+    animation: word 1.25s cubic-bezier(.2,.8,.2,1) forwards; }
+  @keyframes word { 0% { transform: translateX(-40%) skewX(-12deg); opacity: 0; } 18% { transform: translateX(0) skewX(-8deg); opacity: 1; }
+    80% { transform: translateX(0) skewX(-8deg); opacity: 1; } 100% { transform: translateY(-110%) skewX(-8deg); opacity: 0; } }
+  .fx .who { position: absolute; inset: 0; opacity: 0; animation: who .45s ease-out 1.15s forwards; }
+  @keyframes who { 0% { opacity: 0; transform: translateY(40%); } 100% { opacity: 1; transform: translateY(0); } }
+
+  /* Full-screen break card */
+  .card { background: radial-gradient(120% 90% at 50% 40%, #1c1c22 0%, #0b0b0e 62%, #050506 100%); overflow: hidden; }
+  .card .glow { position: absolute; top: 0; bottom: 0; width: 520px; opacity: .28; filter: blur(60px); }
+  .card .band { position: absolute; left: 0; right: 0; height: 6px; }
+  .card .t { position: absolute; left: 60px; right: 60px; text-align: center; white-space: nowrap; overflow: hidden; line-height: 1; }
+  .card .pill { position: absolute; left: 50%; transform: translateX(-50%); padding: 10px 26px 6px; border-radius: 999px;
+    background: #ECA030; color: #08080A; white-space: nowrap; line-height: 1; }
+  .card .setchip { display: inline-block; margin: 0 8px; padding: 6px 14px 3px; border-radius: 8px; background: rgba(250,246,237,.08); }
   #status { position: fixed; left: 8px; bottom: 6px; font: 600 13px system-ui, sans-serif; color: #fff; background: rgba(0,0,0,.55);
     padding: 3px 8px; border-radius: 6px; display: none; }
   body.preview #status { display: block; }
 </style>
 </head>
 <body>
-<div id="stage"></div>
+<div id="stage"><div id="board"></div><div id="fx"></div><div id="card"></div></div>
 <div id="status">Connecting…</div>
 <script src="config.js"></script>
 <script src="js/match.js"></script>
@@ -52,18 +81,23 @@
   'use strict';
   const M = window.RobinsMatch, T = window.RobinsTeams, A = window.RobinsApi;
   const W = 1280, H = 720;
-  const BLACK = '#08080A', GOLD = '#ECA030', CREAM = '#FAF6ED', PANEL = '#1C1C22';
+  const GOLD = '#ECA030', CREAM = '#FAF6ED', PANEL = '#1C1C22', BLACK = '#08080A';
+  const SVGNS = 'http://www.w3.org/2000/svg';
   const params = new URLSearchParams(location.search);
   const preview = params.has('preview');
   const demo = params.has('demo');
   const court = A.court();
   const stage = document.getElementById('stage');
+  const layer = { board: document.getElementById('board'), fx: document.getElementById('fx'), card: document.getElementById('card') };
   const status = document.getElementById('status');
   if (preview) document.body.classList.add('preview');
 
   let board = null;          // last board from the service
-  let bannerUntil = 0;       // local clock time when the current banner ends (0 = until cleared)
-  let bannerKey = '';
+  let clockOffset = 0;       // service time − this device's time
+  let bannerUntil = 0, bannerKey = '';
+  let lastPlayAt = null;     // the last stat play shown (or skipped on first load)
+  let lastPoints = null;     // to make the points that just changed "pop"
+  let geometry = null;       // where the scorebug is, for stat plays
 
   function fitStage() {
     const vw = document.documentElement.clientWidth || window.innerWidth;
@@ -78,43 +112,63 @@
     const d = document.createElement('div');
     if (cls) d.className = cls;
     Object.assign(d.style, css || {});
-    (parent || stage).appendChild(d);
+    parent.appendChild(d);
     return d;
   }
-
   function px(v) { return v + 'px'; }
 
   /** Shrinks text until it fits, like the app's fitText. */
   function fit(node, preferred, maxWidth) {
     let size = preferred;
     node.style.fontSize = px(size);
-    const limit = Math.ceil(maxWidth); // scrollWidth is a whole number of pixels
+    const limit = Math.ceil(maxWidth);
     while (size > 10 && node.scrollWidth > limit) { size -= 1; node.style.fontSize = px(size); }
   }
 
-  function logoNode(id, color, x, y, size, parent) {
+  function logoNode(id, color, x, y, size, parent, opacity) {
     const url = T.logoUrl(id);
     if (url) {
-      const img = document.createElement('img');
-      img.className = 'logo'; img.src = url; img.alt = '';
-      Object.assign(img.style, { left: px(x), top: px(y), width: px(size), height: px(size) });
-      parent.appendChild(img);
+      const svg = document.createElementNS(SVGNS, 'svg');
+      svg.setAttribute('class', 'logo');
+      svg.setAttribute('viewBox', '0 0 100 100');
+      Object.assign(svg.style, { left: px(x), top: px(y), width: px(size), height: px(size), opacity: opacity == null ? 1 : opacity });
+      const img = document.createElementNS(SVGNS, 'image');
+      img.setAttribute('href', url);
+      img.setAttribute('width', '100'); img.setAttribute('height', '100');
+      img.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+      svg.appendChild(img);
+      parent.appendChild(svg);
       return;
     }
     const team = T.find(id);
     if (!team) return;
-    const disc = el('stand-in', { left: px(x), top: px(y), width: px(size), height: px(size), background: color || '#3A5A8C',
-      color: M.textOn(color || '#3A5A8C'), fontSize: px(size * 0.42) }, parent);
+    const c = color || team.color || '#3A5A8C';
+    const disc = el('stand-in d', { left: px(x), top: px(y), width: px(size), height: px(size), background: c,
+      color: M.textOn(c), fontSize: px(size * 0.42) }, parent);
     disc.textContent = T.initials(team);
   }
 
+  function styleOf(b) { return Object.assign({ corner: 'tl', scale: 1, show: true }, (b && b.style) || {}); }
+  function teamColor(st, side) { return st[side + 'Color'] || (side === 'home' ? '#BE121C' : '#3A5A8C'); }
+  /** Very dark jerseys (a blackout kit) get an outline in their accent color so the points box still shows. */
+  function outline(st, side) {
+    const c = teamColor(st, side), a = st[side + 'Accent'];
+    return a && M.luminance(c) < 0.03 ? 'inset 0 0 0 2px ' + a : '';
+  }
+
+  // ---------------------------------------------------------------- scoreboard
+
   function render() {
-    stage.textContent = '';
-    if (!board || !M.isValid(board.match)) return;
+    layer.board.textContent = '';
+    geometry = null;
+    if (!board || !M.isValid(board.match)) { layer.card.textContent = ''; return; }
     const s = board.match;
-    const st = Object.assign({ corner: 'tl', scale: 1, show: true }, board.style || {});
+    const st = styleOf(board);
     const left = st.corner === 'tl' || st.corner === 'bl';
     const top = st.corner === 'tl' || st.corner === 'tr';
+    const card = board.card;
+    if (card && card.type) { drawCard(card, s, st); return; }
+    layer.card.textContent = '';
     if (st.show !== false) drawScorebug(s, st, left, top);
     if (st.badge) drawBadge(st, left);
     const b = board.banner;
@@ -130,21 +184,23 @@
     const margin = 36;
     const x0 = left ? margin : W - margin - totalW;
     const y0 = top ? margin : H - margin - totalH;
-    const bug = el('abs bug', { left: px(x0), top: px(y0), width: px(totalW), height: px(totalH), borderRadius: px(10 * k) });
+    geometry = { x: x0, y: y0, w: totalW, h: totalH, k, left };
+    const bug = el('abs bug', { left: px(x0), top: px(y0), width: px(totalW), height: px(totalH), borderRadius: px(10 * k) }, layer.board);
 
+    const now = { home: M.points(s, 'home'), away: M.points(s, 'away') };
     const sit = M.situation(s);
     ['home', 'away'].forEach(function (side, i) {
       const y = pad / 2 + i * rowH;
-      const color = (side === 'home' ? st.homeColor : st.awayColor) || (side === 'home' ? '#BE121C' : '#3A5A8C');
+      const color = teamColor(st, side);
       let x = 0;
-      el('stripe', { left: px(x + 4 * k), top: px(y + 6 * k), width: px(stripeW - 4 * k), height: px(rowH - 12 * k), background: color }, bug);
+      el('stripe', { left: px(x + 4 * k), top: px(y + 6 * k), width: px(stripeW - 4 * k), height: px(rowH - 12 * k), background: st[side + 'Accent'] || color }, bug);
       x += stripeW;
       if (logoW > 0) {
         const id = side === 'home' ? st.homeLogo : st.awayLogo;
         if (id) logoNode(id, color, x + 5 * k, y + 3 * k, rowH - 6 * k, bug);
         x += logoW;
       }
-      const name = el('name', { left: px(x + 8 * k), top: px(y), height: px(rowH), lineHeight: px(rowH + 3 * k), width: px(nameW - 12 * k), color: CREAM }, bug);
+      const name = el('name d', { left: px(x + 8 * k), top: px(y), height: px(rowH), lineHeight: px(rowH + 3 * k), width: px(nameW - 12 * k), color: CREAM }, bug);
       name.textContent = M.name(s, side).toUpperCase();
       fit(name, 40 * k, nameW - 12 * k);
       x += nameW;
@@ -154,13 +210,16 @@
       }
       x += dotW;
       el('sets', { left: px(x + 2 * k), top: px(y + 6 * k), width: px(setsW - 4 * k), height: px(rowH - 12 * k), background: PANEL, borderRadius: px(4 * k) }, bug);
-      const sets = el('num', { left: px(x), top: px(y), width: px(setsW), height: px(rowH), lineHeight: px(rowH + 3 * k), fontSize: px(32 * k), color: GOLD }, bug);
+      const sets = el('num d', { left: px(x), top: px(y), width: px(setsW), height: px(rowH), lineHeight: px(rowH + 3 * k), fontSize: px(32 * k), color: GOLD }, bug);
       sets.textContent = String(M.setsWon(s, side));
       x += setsW;
-      el('pts', { left: px(x + 4 * k), top: px(y + 4 * k), width: px(ptsW - 4 * k), height: px(rowH - 8 * k), background: color, borderRadius: px(6 * k) }, bug);
-      const pts = el('num', { left: px(x + 2 * k), top: px(y), width: px(ptsW), height: px(rowH), lineHeight: px(rowH + 5 * k), fontSize: px(46 * k), color: M.textOn(color) }, bug);
-      pts.textContent = String(M.points(s, side));
+      const box = el('pts', { left: px(x + 4 * k), top: px(y + 4 * k), width: px(ptsW - 4 * k), height: px(rowH - 8 * k), background: color,
+        borderRadius: px(6 * k), boxShadow: outline(st, side) }, bug);
+      const pts = el('num d', { left: px(x + 2 * k), top: px(y), width: px(ptsW), height: px(rowH), lineHeight: px(rowH + 5 * k), fontSize: px(46 * k), color: M.textOn(color) }, bug);
+      pts.textContent = String(now[side]);
+      if (lastPoints && lastPoints.set === s.setNumber && lastPoints[side] !== now[side]) { box.classList.add('pop'); pts.classList.add('pop'); }
     });
+    lastPoints = { set: s.setNumber, home: now.home, away: now.away };
 
     // Footer: set number, previous sets or the event, and SET/MATCH POINT.
     const fy = pad / 2 + rowH * 2;
@@ -178,7 +237,7 @@
     }
     let alertWidth = 0;
     if (alert) {
-      const a = el('foot', { top: px(fy), height: px(footerH), lineHeight: px(footerH + 2 * k), color: GOLD, textAlign: 'right' }, bug);
+      const a = el('foot c', { top: px(fy), height: px(footerH), lineHeight: px(footerH + 2 * k), color: GOLD, textAlign: 'right' }, bug);
       a.textContent = alert;
       a.style.right = px(totalW - textRight);
       const maxA = (textRight - textLeft) * 0.55;
@@ -186,7 +245,7 @@
       fit(a, 19 * k, maxA);
       alertWidth = Math.min(a.scrollWidth, maxA) + 12 * k;
     }
-    const f = el('foot', { left: px(textLeft), top: px(fy), height: px(footerH), lineHeight: px(footerH + 2 * k), color: 'rgba(250,246,237,.86)' }, bug);
+    const f = el('foot c', { left: px(textLeft), top: px(fy), height: px(footerH), lineHeight: px(footerH + 2 * k), color: 'rgba(250,246,237,.86)' }, bug);
     f.textContent = info;
     const room = textRight - textLeft - alertWidth;
     f.style.width = px(room);
@@ -195,19 +254,15 @@
 
   /** League/region badge, like a broadcaster's corner bug, opposite the scoreboard. */
   function drawBadge(st, scoreboardLeft) {
-    const url = T.logoUrl(st.badge);
-    if (!url) return;
+    if (!T.logoUrl(st.badge)) return;
     const size = 118 * Math.min(1.6, Math.max(0.6, Number(st.scale) || 1));
     const margin = 30;
     const x = scoreboardLeft ? W - margin - size : margin;
     if (st.badge.indexOf('league-') === 0) {
       // Light lettering (the AVA mark) gets the scoreboard's dark plate so it reads over a bright gym.
-      el('abs plate', { left: px(x - 6), top: px(margin + size * 0.08), width: px(size + 12), height: px(size * 0.84), borderRadius: '12px' });
+      el('abs plate', { left: px(x - 6), top: px(margin + size * 0.08), width: px(size + 12), height: px(size * 0.84), borderRadius: '12px' }, layer.board);
     }
-    const img = document.createElement('img');
-    img.className = 'logo'; img.src = url; img.alt = '';
-    Object.assign(img.style, { left: px(x), top: px(margin), width: px(size), height: px(size), opacity: 0.94 });
-    stage.appendChild(img);
+    logoNode(st.badge, null, x, margin, size, layer.board, 0.94);
   }
 
   /** Set, match and timeout banners; at the bottom unless the scoreboard is down there. */
@@ -215,20 +270,151 @@
     const w = 760, h = b.subtitle ? 104 : 72;
     const x = (W - w) / 2;
     const y = atBottom ? H - 56 - h : 40;
-    const panel = el('abs banner', { left: px(x), top: px(y), width: px(w), height: px(h), borderRadius: '10px' });
+    const panel = el('abs banner', { left: px(x), top: px(y), width: px(w), height: px(h), borderRadius: '10px' }, layer.board);
     el('red', {}, panel); el('gold', {}, panel);
-    const t = el('title', { top: px(20), height: px(48), lineHeight: px(50) }, panel);
+    const t = el('title d', { top: px(20), height: px(48), lineHeight: px(50) }, panel);
     t.textContent = b.title.toUpperCase();
     fit(t, 50, w - 40);
     if (b.subtitle) {
-      const sub = el('sub', { top: px(72), height: px(26), lineHeight: px(26) }, panel);
+      const sub = el('sub c', { top: px(72), height: px(26), lineHeight: px(26) }, panel);
       sub.textContent = b.subtitle.toUpperCase();
       fit(sub, 24, w - 40);
     }
   }
 
+  // ---------------------------------------------------------------- stat plays
+
+  const PLAY_WORDS = { KILL: 'KILL!', ACE: 'ACE!', BLOCK: 'BLOCK!', DIG: 'DIG!' };
+
+  function playStat(p) {
+    if (!geometry || !board) return;
+    const st = styleOf(board);
+    const s = board.match;
+    const g = geometry, k = g.k;
+    const color = teamColor(st, p.side);
+    const ink = M.textOn(color);
+    const w = 330 * k, h = g.h;
+    const x = g.left ? g.x + g.w + 8 : g.x - 8 - w;
+    layer.fx.textContent = '';
+    const box = el('abs fx ' + (g.left ? 'l' : 'r'), { left: px(x), top: px(g.y), width: px(w), height: px(h), background: color,
+      boxShadow: outline(st, p.side) }, layer.fx);
+    el('slash', {}, box);
+    const word = el('word d', { top: px(h / 2 - 44 * k), height: px(90 * k), lineHeight: px(96 * k), fontSize: px(92 * k), color: ink }, box);
+    word.textContent = PLAY_WORDS[p.kind] || (p.kind || '').toUpperCase();
+
+    const who = el('who', {}, box);
+    const pad = 14 * k;
+    let tx = pad;
+    if (p.number) {
+      const nb = el('abs d', { left: px(pad), top: px(h / 2 - 38 * k), width: px(76 * k), height: px(76 * k), borderRadius: px(8 * k),
+        background: CREAM, color: M.luminance(color) > 0.6 ? BLACK : color, textAlign: 'center', lineHeight: px(84 * k), fontSize: px(64 * k) }, who);
+      nb.textContent = p.number;
+      tx = pad + 76 * k + 14 * k;
+    } else {
+      const id = p.side === 'home' ? st.homeLogo : st.awayLogo;
+      if (id) { logoNode(id, color, pad, h / 2 - 36 * k, 72 * k, who); tx = pad + 86 * k; }
+    }
+    const room = w - tx - pad;
+    const nm = el('abs d', { left: px(tx), top: px(h / 2 - 40 * k), width: px(room), height: px(50 * k), lineHeight: px(54 * k), color: ink,
+      whiteSpace: 'nowrap', overflow: 'hidden' }, who);
+    nm.textContent = (p.name || M.name(s, p.side)).toUpperCase();
+    fit(nm, 48 * k, room);
+    const sub = el('abs c', { left: px(tx), top: px(h / 2 + 14 * k), width: px(room), height: px(26 * k), lineHeight: px(28 * k), color: ink,
+      opacity: .9, whiteSpace: 'nowrap', overflow: 'hidden', letterSpacing: '.06em' }, who);
+    sub.textContent = ((PLAY_WORDS[p.kind] || p.kind || '').replace('!', '') + '  ·  ' + (s.matchOver ? 'FINAL' : 'SET ' + s.setNumber)).toUpperCase();
+    fit(sub, 22 * k, room);
+    clearTimeout(playStat.timer);
+    playStat.timer = setTimeout(function () { layer.fx.textContent = ''; }, 4500);
+  }
+
+  // ---------------------------------------------------------------- break cards
+
+  const CARD_LABELS = { soon: 'Starting soon', break: 'Set break', timeout: 'Timeout', brb: 'Be right back', final: 'Final' };
+  const COUNT_LABELS = { soon: 'Starts in', break: 'Back in', timeout: 'Back in', brb: 'Back in' };
+  let cardTimer = null;
+
+  function drawCard(c, s, st) {
+    layer.board.textContent = '';
+    layer.fx.textContent = '';
+    const root = layer.card;
+    root.textContent = '';
+    const card = el('abs card', { left: 0, top: 0, width: px(W), height: px(H) }, root);
+    const hc = teamColor(st, 'home'), ac = teamColor(st, 'away');
+    const glow = side => { const c = teamColor(st, side), a = st[side + 'Accent']; return a && M.luminance(c) < 0.03 ? a : c; };
+    el('glow', { left: '-160px', background: glow('home') }, card);
+    el('glow', { right: '-160px', background: glow('away') }, card);
+    el('band', { top: 0, background: '#BE121C' }, card);
+    el('band', { top: '6px', height: '3px', background: GOLD }, card);
+
+    const event = [st.eventTitle, divisionLabel(st.division)].filter(Boolean).join('  ·  ').toUpperCase();
+    if (event) {
+      const e = el('t c', { top: '46px', height: '34px', lineHeight: '34px', color: GOLD, letterSpacing: '.14em' }, card);
+      e.textContent = event;
+      fit(e, 28, W - 120);
+    }
+    const label = (c.title || CARD_LABELS[c.type] || '').toUpperCase();
+    const head = el('t d', { top: '92px', height: '120px', lineHeight: '128px', color: CREAM }, card);
+    head.textContent = label;
+    fit(head, 124, W - 120);
+
+    // Matchup: logos, names and the score so far.
+    const logo = 150, cy = 250;
+    logoNode(st.homeLogo, hc, 140, cy, logo, card);
+    logoNode(st.awayLogo, ac, W - 140 - logo, cy, logo, card);
+    const hn = el('abs d', { left: '60px', width: '310px', top: px(cy + logo + 14), height: '48px', lineHeight: '52px', textAlign: 'center', color: CREAM, whiteSpace: 'nowrap', overflow: 'hidden' }, card);
+    hn.textContent = M.name(s, 'home').toUpperCase(); fit(hn, 46, 310);
+    const an = el('abs d', { left: px(W - 370), width: '310px', top: px(cy + logo + 14), height: '48px', lineHeight: '52px', textAlign: 'center', color: CREAM, whiteSpace: 'nowrap', overflow: 'hidden' }, card);
+    an.textContent = M.name(s, 'away').toUpperCase(); fit(an, 46, 310);
+
+    const started = s.home || s.away || s.completedSets.length;
+    if (c.type !== 'soon' || started) {
+      const big = el('t d', { top: px(cy + 4), height: '150px', lineHeight: '160px', color: CREAM }, card);
+      big.innerHTML = '<span>' + M.setsWon(s, 'home') + '</span><span style="color:' + GOLD + ';margin:0 34px;font-size:80px;vertical-align:22px">SETS</span><span>' + M.setsWon(s, 'away') + '</span>';
+      big.style.fontSize = '150px';
+      const chips = s.completedSets.map((x, i) => '<span class="setchip">S' + (i + 1) + '  ' + x.home + '–' + x.away + '</span>');
+      if (!s.matchOver && (s.home || s.away)) chips.push('<span class="setchip" style="color:' + GOLD + '">SET ' + s.setNumber + '  ' + s.home + '–' + s.away + '</span>');
+      const row = el('t c', { top: px(cy + 164), height: '52px', lineHeight: '52px', color: CREAM, fontSize: '28px', overflow: 'visible' }, card);
+      row.innerHTML = chips.join('');
+    } else {
+      const vs = el('t d', { top: px(cy + 30), height: '100px', lineHeight: '108px', color: GOLD, fontSize: '96px' }, card);
+      vs.textContent = 'VS';
+    }
+    if (c.type === 'final') {
+      const w = M.matchWinner(s);
+      const wl = el('t d', { top: '520px', height: '56px', lineHeight: '60px', color: GOLD }, card);
+      wl.textContent = s.matchOver ? (w ? M.name(s, w).toUpperCase() + ' WIN' : 'MATCH TIED') : '';
+      fit(wl, 56, W - 120);
+    }
+    if (c.message) {
+      const m = el('t c', { top: '540px', height: '40px', lineHeight: '42px', color: CREAM, opacity: .92 }, card);
+      m.textContent = c.message;
+      fit(m, 34, W - 120);
+    }
+    // Countdown, kept in step with the service's clock.
+    clearInterval(cardTimer);
+    if (c.seconds > 0 && COUNT_LABELS[c.type]) {
+      const pill = el('pill d', { top: '598px', fontSize: '42px' }, card);
+      const end = (c.at || 0) + c.seconds * 1000;
+      const tick = function () {
+        const left = Math.max(0, Math.round((end - (Date.now() + clockOffset)) / 1000));
+        pill.textContent = left > 0 ? COUNT_LABELS[c.type].toUpperCase() + '  ' + Math.floor(left / 60) + ':' + String(left % 60).padStart(2, '0') : 'BACK SHORTLY';
+      };
+      tick();
+      cardTimer = setInterval(tick, 1000);
+    }
+    // Footer: league or region badge and the club.
+    if (st.badge) logoNode(st.badge, null, 40, H - 112, 80, card, 0.95);
+    const club = el('abs c', { right: '44px', bottom: '40px', color: 'rgba(250,246,237,.7)', fontSize: '24px', letterSpacing: '.12em', whiteSpace: 'nowrap' }, card);
+    club.textContent = 'ROBINS VARSITY VOLLEYBALL';
+  }
+
+  function divisionLabel(d) { return d === 'men' ? "Men's" : d === 'women' ? "Women's" : d === 'coed' ? 'Co-Ed' : ''; }
+
+  // ---------------------------------------------------------------- updates
+
   function accept(res) {
     if (!res || !res.ok) return;
+    if (res.now) clockOffset = res.now - Date.now();
     const next = res.board || null;
     const b = next && next.banner;
     const key = b ? b.title + '|' + b.at : '';
@@ -244,7 +430,14 @@
     const changed = JSON.stringify(next) !== JSON.stringify(board);
     board = next;
     if (changed) {
-      try { render(); } catch (e) { stage.textContent = ''; console.log('Board not drawn: ' + e.message); }
+      try { render(); } catch (e) { layer.board.textContent = ''; console.log('Board not drawn: ' + e.message); }
+    }
+    const p = next && next.play;
+    if (lastPlayAt === null) { lastPlayAt = p ? p.at : 0; return; }      // don't replay old plays on load
+    if (p && p.at !== lastPlayAt) {
+      lastPlayAt = p.at;
+      const age = (res.now || Date.now()) - p.at;
+      if (age < 9000 && !(next.card && next.card.type) && styleOf(next).show !== false) playStat(p);
     }
   }
 
@@ -258,7 +451,7 @@
       status.textContent = e.message === 'not-configured' ? 'Live-score service not set up yet (config.js)' :
         'Court ' + court + ' · reconnecting… (last update ' + (lastOk ? Math.round((Date.now() - lastOk) / 1000) + ' s ago' : 'never') + ')';
     }
-    setTimeout(poll, 1200);
+    setTimeout(poll, 1000);
   }
 
   function demoBoard() {
@@ -267,21 +460,35 @@
     for (let i = 0; i < 18; i++) s = M.point(s, i % 3 ? 'away' : 'home').state;
     for (let i = 0; i < 4; i++) s = M.point(s, 'home').state;
     const now = Date.now();
+    const cardType = params.get('card');
     return { ok: true, now, board: { version: 1, match: s,
-      style: { corner: params.get('corner') || 'tl', scale: Number(params.get('scale')) || 1, show: true, homeColor: '#BE121C', awayColor: '#1B3A6B',
-        homeLogo: 'team-robins', awayLogo: params.get('away') || 'team-macdill', badge: params.get('badge') || 'league-ava', eventTitle: 'Gulf Regionals' },
-      banner: params.has('banner') ? { title: 'Robins win set 1', subtitle: 'Robins 25 – 6 MacDill', seconds: 0, at: now } : null } };
+      style: { corner: params.get('corner') || 'tl', scale: Number(params.get('scale')) || 1, show: true, homeColor: '#BE121C', awayColor: '#1E8C88',
+        homeLogo: 'team-robins', awayLogo: params.get('away') || 'team-macdill', badge: params.get('badge') || 'league-ava', eventTitle: 'Gulf Regionals', division: 'men' },
+      banner: params.has('banner') ? { title: 'Robins win set 1', subtitle: 'Robins 25 – 6 MacDill', seconds: 0, at: now } : null,
+      card: cardType ? { type: cardType, title: '', message: params.get('msg') || '', seconds: Number(params.get('sec') || 0), at: now } : null,
+      play: null } };
   }
 
-  window.addEventListener('resize', function () { fitStage(); });
+  async function loadFonts() {
+    // Loaded from script (not CSS url()) so Tubeist can tell when the page is idle.
+    const faces = [new FontFace('Bebas Neue', 'url(fonts/bebas-neue.woff2)'),
+      new FontFace('Barlow Condensed', 'url(fonts/barlow-condensed-600.woff2)', { weight: '600' })];
+    await Promise.all(faces.map(f => f.load().then(x => document.fonts.add(x)).catch(() => null)));
+  }
+
+  window.addEventListener('resize', fitStage);
   fitStage();
-  T.load().then(function () {
-    const go = function () {
-      if (demo) { accept(demoBoard()); status.textContent = 'Demo match'; } else poll();
-    };
-    if (document.fonts && document.fonts.ready) document.fonts.ready.then(go); else go();
+  Promise.all([T.load(), loadFonts()]).then(function () {
+    if (demo) {
+      accept(demoBoard());
+      status.textContent = 'Demo';
+      const kind = params.get('play');
+      if (kind) setTimeout(function () { playStat({ kind: kind.toUpperCase(), side: params.get('side') || 'home', number: params.get('num') || '10', name: params.get('name') || 'Tolliver' }); }, 300);
+    } else {
+      poll();
+    }
     // Banners that run out need a redraw even when nothing new arrives.
-    setInterval(function () { if (bannerUntil && Date.now() >= bannerUntil && board && board.banner) { bannerUntil = -1; render(); } }, 500);
+    setInterval(function () { if (bannerUntil > 0 && Date.now() >= bannerUntil && board && board.banner) { bannerUntil = -1; render(); } }, 500);
   });
 })();
 </script>
