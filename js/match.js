@@ -7,14 +7,28 @@
   'use strict';
 
   const PRESETS = [
-    { id: 'bo3', label: 'Best of 3 (25-25-15)', format: { maxSets: 3, playAllSets: false, pointsPerSet: 25, decidingSetPoints: 15, winBy: 2, pointCap: 0 } },
-    { id: 'bo5', label: 'Best of 5 (25×4, 15)', format: { maxSets: 5, playAllSets: false, pointsPerSet: 25, decidingSetPoints: 15, winBy: 2, pointCap: 0 } },
-    { id: 'pool2', label: '2 sets to 25 (pool play)', format: { maxSets: 2, playAllSets: true, pointsPerSet: 25, decidingSetPoints: 25, winBy: 2, pointCap: 0 } },
-    { id: 'all3', label: '3 sets, all played (25-25-15)', format: { maxSets: 3, playAllSets: true, pointsPerSet: 25, decidingSetPoints: 15, winBy: 2, pointCap: 0 } },
-    { id: 'one', label: '1 set to 25', format: { maxSets: 1, playAllSets: false, pointsPerSet: 25, decidingSetPoints: 25, winBy: 2, pointCap: 0 } },
+    { id: 'bo3', label: 'Best of 3 (25-25-15)', format: { maxSets: 3, playAllSets: false, pointsPerSet: 25, decidingSetPoints: 15, winBy: 2, pointCap: 0, capOver: 0, timeoutsPerSet: 2 } },
+    { id: 'bo5', label: 'Best of 5 (25×4, 15)', format: { maxSets: 5, playAllSets: false, pointsPerSet: 25, decidingSetPoints: 15, winBy: 2, pointCap: 0, capOver: 0, timeoutsPerSet: 2 } },
+    { id: 'pool2', label: '2 sets to 25 (pool play)', format: { maxSets: 2, playAllSets: true, pointsPerSet: 25, decidingSetPoints: 25, winBy: 2, pointCap: 0, capOver: 0, timeoutsPerSet: 2 } },
+    { id: 'all3', label: '3 sets, all played (25-25-15)', format: { maxSets: 3, playAllSets: true, pointsPerSet: 25, decidingSetPoints: 15, winBy: 2, pointCap: 0, capOver: 0, timeoutsPerSet: 2 } },
+    { id: 'one', label: '1 set to 25', format: { maxSets: 1, playAllSets: false, pointsPerSet: 25, decidingSetPoints: 25, winBy: 2, pointCap: 0, capOver: 0, timeoutsPerSet: 2 } },
   ];
 
   const DEFAULT_FORMAT = PRESETS[0].format;
+
+  /** Point-cap choices, as points over the set's target (25 → 27 with +2). 0 = no cap. */
+  const CAP_CHOICES = [0, 2, 3, 5, 7];
+  /** Timeouts each team gets per set. 0 = unlimited. */
+  const TIMEOUT_CHOICES = [1, 2, 3, 0];
+
+  /** A format with every field filled in (older boards don't have capOver or timeoutsPerSet). */
+  function normFormat(f) {
+    const x = Object.assign({}, DEFAULT_FORMAT, f || {});
+    x.capOver = Number.isFinite(x.capOver) && x.capOver > 0 ? Math.floor(x.capOver) : 0;
+    x.timeoutsPerSet = Number.isFinite(x.timeoutsPerSet) && x.timeoutsPerSet >= 0 ? Math.floor(x.timeoutsPerSet) : 2;
+    x.pointCap = Number.isFinite(x.pointCap) && x.pointCap > 0 ? x.pointCap : 0;
+    return x;
+  }
 
   function other(side) { return side === 'home' ? 'away' : 'home'; }
 
@@ -25,29 +39,48 @@
     return f.maxSets > 1 && f.maxSets % 2 === 1 && setNumber === f.maxSets ? f.decidingSetPoints : f.pointsPerSet;
   }
 
+  /** The score that ends a set no matter the margin: target + capOver (or a fixed pointCap); 0 = none. */
+  function capFor(f, setNumber) {
+    if (f.capOver > 0) return targetFor(f, setNumber) + f.capOver;
+    return f.pointCap > 0 ? f.pointCap : 0;
+  }
+
+  function timeoutLimit(f) { return Number.isFinite(f.timeoutsPerSet) ? f.timeoutsPerSet : 2; }
+
   function isSetWon(f, score, opponent, setNumber) {
-    if (f.pointCap > 0 && score >= f.pointCap && score > opponent) return true;
+    const cap = capFor(f, setNumber);
+    if (cap > 0 && score >= cap && score > opponent) return true;
     return score >= targetFor(f, setNumber) && score - opponent >= f.winBy;
   }
 
+  const CORE_KEYS = ['maxSets', 'playAllSets', 'pointsPerSet', 'decidingSetPoints', 'winBy', 'pointCap'];
+
+  /** The preset these sets and targets match, ignoring the cap and timeouts. */
+  function presetFor(f) { return PRESETS.find(p => CORE_KEYS.every(k => p.format[k] === f[k])) || null; }
+
   function formatLabel(f) {
-    const preset = PRESETS.find(p => sameFormat(p.format, f));
-    if (preset) return preset.label;
-    let s = (f.playAllSets ? f.maxSets + ' sets' : 'Best of ' + f.maxSets) + ' to ' + f.pointsPerSet;
-    if (f.maxSets > 1 && f.maxSets % 2 === 1 && f.decidingSetPoints !== f.pointsPerSet) s += ', last to ' + f.decidingSetPoints;
-    if (f.pointCap > 0) s += ', cap ' + f.pointCap;
+    const preset = presetFor(f);
+    let s;
+    if (preset) s = preset.label;
+    else {
+      s = (f.playAllSets ? f.maxSets + ' sets' : 'Best of ' + f.maxSets) + ' to ' + f.pointsPerSet;
+      if (f.maxSets > 1 && f.maxSets % 2 === 1 && f.decidingSetPoints !== f.pointsPerSet) s += ', last to ' + f.decidingSetPoints;
+      if (f.pointCap > 0 && !(f.capOver > 0)) s += ', cap ' + f.pointCap;
+    }
+    if (f.capOver > 0) s += ', cap +' + f.capOver;
     return s;
   }
 
   function sameFormat(a, b) {
-    return ['maxSets', 'playAllSets', 'pointsPerSet', 'decidingSetPoints', 'winBy', 'pointCap'].every(k => a[k] === b[k]);
+    const x = normFormat(a), y = normFormat(b);
+    return CORE_KEYS.concat(['capOver', 'timeoutsPerSet']).every(k => x[k] === y[k]);
   }
 
   function newMatch(homeName, awayName, format, firstServer) {
     return {
       homeName: (homeName || '').trim() || 'ROBINS',
       awayName: (awayName || '').trim() || 'OPPONENT',
-      format: Object.assign({}, format || DEFAULT_FORMAT),
+      format: normFormat(format),
       setNumber: 1,
       home: 0,
       away: 0,
@@ -106,7 +139,15 @@
     return { state: copy(s, { serving: side, firstServerThisSet: first }), type: 'SERVE' };
   }
 
+  /** Timeouts a team has left this set; Infinity when unlimited. */
+  function timeoutsLeft(s, side) {
+    const limit = timeoutLimit(s.format);
+    return limit > 0 ? Math.max(0, limit - timeouts(s, side)) : Infinity;
+  }
+
+  /** A called timeout. Refused (type null) once the team has used its timeouts for the set, or after the match. */
   function timeout(s, side) {
+    if (s.matchOver || timeoutsLeft(s, side) <= 0) return { state: s, type: null };
     return { state: copy(s, side === 'home' ? { homeTimeouts: s.homeTimeouts + 1 } : { awayTimeouts: s.awayTimeouts + 1 }), type: 'TIMEOUT' };
   }
 
@@ -194,7 +235,8 @@
   }
 
   const api = {
-    PRESETS, isValid, DEFAULT_FORMAT, other, setsToWin, targetFor, isSetWon, formatLabel, sameFormat,
+    PRESETS, CAP_CHOICES, TIMEOUT_CHOICES, isValid, DEFAULT_FORMAT, normFormat, presetFor, capFor, timeoutLimit, timeoutsLeft,
+    other, setsToWin, targetFor, isSetWon, formatLabel, sameFormat,
     newMatch, point, removePoint, setServing, timeout, rename,
     points, name, timeouts, setsWon, situation, matchWinner, bannerFor, textOn, luminance, lastName,
   };

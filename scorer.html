@@ -84,6 +84,21 @@
   #how .opts { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
   #how button { border: 0; border-radius: 12px; padding: 14px 2px; font-size: 18px; font-weight: 700; background: var(--panel2); }
   #how button.k { background: var(--gold); color: var(--black); }
+  #tobar { position: fixed; left: 10px; right: 10px; top: calc(env(safe-area-inset-top) + 44px); background: #101014; border: 1px solid #33333c;
+    border-radius: 16px; padding: 10px; z-index: 16; box-shadow: 0 12px 32px rgba(0,0,0,.65); }
+  #tobar .q { font-size: 16px; margin: 0 4px 8px; }
+  #tobar .opts { display: grid; grid-template-columns: 2fr 1fr; gap: 6px; }
+  #tobar button { border: 0; border-radius: 12px; padding: 14px 4px; font-size: 18px; font-weight: 700; background: var(--panel2); }
+  #tobar button.k { background: var(--gold); color: var(--black); }
+  .row button.spent { opacity: .45; }
+  /* Logos sit on a plate that contrasts with the logo, so dark logos show on dark team colors and vice versa. */
+  .plate { width: 76px; height: 76px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin-bottom: 4px;
+    background: rgba(8,8,10,.35); box-shadow: 0 0 0 2px rgba(250,246,237,.25); }
+  .plate .logo, .plate .disc { margin: 0; width: 58px; height: 58px; }
+  .tips li { margin: 0 0 10px; line-height: 1.35; font-size: 17px; }
+  .tips li b { color: var(--gold); }
+  .warn { background: #3b2f10; border-radius: 12px; padding: 10px 12px; margin: 12px 0; line-height: 1.35; }
+  .pill.queue { background: var(--panel2); color: var(--gold); cursor: pointer; }
   .players { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
   .pbtn { border: 1px solid var(--line); background: var(--panel); border-radius: 12px; padding: 8px 4px 6px; text-align: center; min-height: 78px; }
   .pbtn b { display: block; font-family: 'Bebas Neue', sans-serif; font-size: 34px; font-weight: 400; line-height: 1; }
@@ -99,6 +114,7 @@
   <header>
     <span id="courtLabel">COURT 1</span>
     <span id="cardPill" class="pill card hidden" data-act="hidecard">BREAK SCREEN ON · HIDE</span>
+    <span id="queuePill" class="pill queue hidden" data-act="clearqueue"></span>
     <span id="sync" class="pill busy">CONNECTING</span>
   </header>
   <div id="situation"></div>
@@ -150,6 +166,15 @@
   </div>
 </div>
 
+<!-- After a timeout: put the timeout screen up? -->
+<div id="tobar" class="hidden">
+  <div class="q" id="toQ">Timeout</div>
+  <div class="opts">
+    <button class="k" data-act="toscreen">Show timeout screen · 0:30</button>
+    <button data-act="toclose">Banner only</button>
+  </div>
+</div>
+
 <!-- Who made the play? -->
 <div id="players" class="sheet hidden">
   <div class="bar"><h2 id="playersTitle">Who?</h2><button class="link" data-act="close">Cancel</button></div>
@@ -183,6 +208,12 @@
   </div>
   <h3>Format</h3>
   <select id="formatIn"></select>
+  <h3>Point cap</h3>
+  <div class="chips" id="capChips"></div>
+  <label class="field" style="max-width:320px">Or type a cap (points over the target)<input type="number" id="capIn" min="1" max="30" inputmode="numeric" placeholder="e.g. 4"></label>
+  <div class="note" id="capNote"></div>
+  <h3>Timeouts per team, each set</h3>
+  <div class="chips" id="toChips"></div>
   <h3>First serve</h3>
   <div class="chips" id="serveChips"></div>
   <h3>Scoreboard look</h3>
@@ -228,6 +259,7 @@
     </div>
     <button class="big" data-act="clearbanner">Clear message</button>
     <button class="big" data-act="csv">Download score log (CSV)</button>
+    <button class="big" data-act="tips">Scorer tips</button>
   </div>
   <h3>Camera phone (Robins Live on Android)</h3>
   <div style="display:flex;gap:14px;align-items:center">
@@ -241,6 +273,24 @@
     <button class="big" data-act="forgetkey">Sign out this phone</button>
   </div>
   <p class="note">In Tubeist: Settings → Overlays → add the link → Save. Highlights are saved with Tubeist's own Save Highlight button.</p>
+</div>
+
+<!-- Shown when a match starts -->
+<div id="tips" class="sheet hidden">
+  <div class="bar"><h2>Before you score</h2><button class="link" data-act="tipsdone">Got it</button></div>
+  <ul class="tips">
+    <li><b>Tap a team's big panel</b> to give them the point. Then pick Kill, Ace, Block or Error, and the player, if you want it on the video. Skip it and the bar closes by itself.</li>
+    <li><b>Kill / Ace / Block take turns.</b> If you enter several quickly, each one plays for about 5 seconds, in order. A pill at the top ("2 PLAYS WAITING") shows how many are left; tap it to skip them.</li>
+    <li><b>T/O</b> uses one of the team's timeouts for this set (the button shows how many are used). It puts a 30-second timeout banner on the video and offers the full timeout screen.</li>
+    <li><b>Serve</b> moves the serve. Points move it automatically.</li>
+    <li><b>More</b> has break screens, on-screen messages, hide scoreboard, the camera-phone QR code and the score log.</li>
+  </ul>
+  <div class="warn"><b>↶ Undo steps back the last change of any kind</b>, one tap at a time: a point, a −1, a serve change, a timeout or a Match setup save. It is not just for points. Tap it slowly and check the score after each tap.</div>
+  <div class="warn"><b>−1 takes one point away from that team</b> in the current set and leaves everything after it alone. Use it to fix a mistake from a while back. It can't reach into a finished set; use Undo for that.</div>
+  <div class="warn">A Kill/Ace/Block already on the video can't be pulled back. Ones still waiting are dropped if you undo or −1 their point.</div>
+  <div class="warn">Only one phone should score a court. If two do, the last one to save wins and the other sees "Score updated from another scorer's phone".</div>
+  <label class="field" style="display:flex;gap:10px;align-items:center"><input type="checkbox" id="tipsHide" style="width:22px;height:22px">Don't show this at the start of every match</label>
+  <div class="stack"><button class="big primary" data-act="tipsdone">Start scoring</button></div>
 </div>
 
 <!-- Scorer code -->
@@ -302,6 +352,13 @@
   let how = null;              // the point being described: { side, eventIndex, canAce }
   let howTimer = null;
   let cardDraft = { type: 'break', seconds: 0 };
+  let playQueue = [];          // Kill / Ace / Block waiting their turn on the video
+  let playOnAirAt = 0;         // when the service took the last play we sent
+  let pumpTimer = null;
+  const PLAY_GAP = 5600;       // time each play gets on the video (the animation runs 4.4 s; overlays check every second)
+  const PLAY_MAX_WAIT = 60000; // plays waiting longer than this are dropped as stale
+  let toTimer = null, toCardTimer = null;
+  const plateCache = {};       // logo id → plate color
 
   function loadEvents() { try { return JSON.parse(A.store(LS + 'log') || '[]'); } catch (e) { return []; } }
   function saveEvents() { A.store(LS + 'log', JSON.stringify(events.slice(-2000))); }
@@ -312,7 +369,7 @@
     clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 1700);
   }
   function setSync(text, cls) { const s = $('sync'); s.textContent = text; s.className = 'pill ' + cls; }
-  function show(id) { ['setup', 'picker', 'menu', 'keySheet', 'players'].forEach(x => $(x).classList.toggle('hidden', x !== id)); }
+  function show(id) { ['setup', 'picker', 'menu', 'keySheet', 'players', 'tips'].forEach(x => $(x).classList.toggle('hidden', x !== id)); }
   function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
   function logoHtml(id, color, cls) {
@@ -324,6 +381,31 @@
     return '<span class="disc" style="background:' + c + ';color:' + M.textOn(c) + '">' + esc(T.initials(t)) + '</span>';
   }
 
+  /** Light plate for dark logos, dark plate for light ones (worked out once per logo from its pixels). */
+  function plateLogos() {
+    document.querySelectorAll('.plate[data-logo]').forEach(plate => {
+      const id = plate.dataset.logo;
+      if (plateCache[id]) { plate.style.background = plateCache[id]; return; }
+      const img = plate.querySelector('img');
+      if (!img) return;
+      const measure = () => {
+        try {
+          const c = document.createElement('canvas'); c.width = c.height = 32;
+          const g = c.getContext('2d'); g.drawImage(img, 0, 0, 32, 32);
+          const d = g.getImageData(0, 0, 32, 32).data;
+          let sum = 0, n = 0;
+          for (let i = 0; i < d.length; i += 4) {
+            if (d[i + 3] < 128) continue;
+            sum += (0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]) / 255; n++;
+          }
+          plateCache[id] = n && sum / n > 0.55 ? '#121216' : '#FAF6ED';
+        } catch (e) { plateCache[id] = '#FAF6ED'; }
+        document.querySelectorAll('.plate[data-logo="' + id + '"]').forEach(p => { p.style.background = plateCache[id]; });
+      };
+      if (img.complete && img.naturalWidth) measure(); else img.addEventListener('load', measure, { once: true });
+    });
+  }
+
   // ---------------------------------------------------------------- scoring screen
   function render() {
     if (!match) return;
@@ -331,12 +413,15 @@
       const color = style[side + 'Color'] || (side === 'home' ? '#BE121C' : '#3A5A8C');
       $(side + 'Tap').style.background = color;
       $(side + 'Tap').style.color = M.textOn(color);
-      $(side + 'Logo').innerHTML = logoHtml(style[side + 'Logo'], color);
+      const logoId = style[side + 'Logo'];
+      const want = logoId ? '<span class="plate" data-logo="' + esc(logoId) + '">' + logoHtml(logoId, color) + '</span>' : '';
+      if ($(side + 'Logo')._html !== want) { $(side + 'Logo').innerHTML = want; $(side + 'Logo')._html = want; }
       $(side + 'Name').textContent = M.name(match, side);
       $(side + 'Pts').textContent = M.points(match, side);
       $(side + 'Sets').textContent = 'SETS ' + M.setsWon(match, side);
-      const to = M.timeouts(match, side);
-      $(side + 'To').textContent = to ? '(' + to + ')' : '';
+      const used = M.timeouts(match, side), limit = M.timeoutLimit(match.format);
+      $(side + 'To').textContent = limit > 0 ? used + '/' + limit : used ? '(' + used + ')' : '';
+      document.querySelector('[data-act="timeout"][data-side="' + side + '"]').classList.toggle('spent', M.timeoutsLeft(match, side) <= 0);
       $(side + 'Box').classList.toggle('serving', match.serving === side && !match.matchOver);
     });
     const sit = M.situation(match);
@@ -351,6 +436,8 @@
     $('history').textContent = match.completedSets.map((x, i) => 'S' + (i + 1) + ' ' + x.home + '-' + x.away).join('   ');
     $('showBtn').textContent = style.show === false ? 'Show scoreboard' : 'Hide scoreboard';
     $('cardPill').classList.toggle('hidden', !currentCard());
+    renderQueue();
+    plateLogos();
   }
 
   function currentCard() {
@@ -370,7 +457,8 @@
   /** Applies one scoring action, keeps it for undo and sends the new board. */
   function commit(result, side) {
     if (!result.type) return -1;
-    undoStack.push({ match, style });
+    const entry = { match, style };
+    undoStack.push(entry);
     if (undoStack.length > 500) undoStack.shift();
     match = result.state;
     const banner = M.bannerFor(result.type, side, match);
@@ -380,9 +468,25 @@
     const card = currentCard();
     if (scored && card && ['soon', 'break', 'timeout', 'brb'].indexOf(card.type) >= 0) cardToSend = null; // play resumed
     const index = record(result.type, side);
+    entry.eventIndex = index;
+    if (result.type === 'CORRECTION') entry.removed = markRemoved(side);
     render();
     queueSave();
     return index;
+  }
+
+  function totalPoints(s, side) { return s.completedSets.reduce((n, x) => n + x[side], 0) + M.points(s, side); }
+
+  /** −1 takes back that team's latest point in this set: mark it in the log so stats can leave it out. */
+  function markRemoved(side) {
+    for (let i = events.length - 2; i >= 0; i--) {
+      const e = events[i];
+      if (e.type === 'NEW_MATCH') break;
+      if (e.side === side && /^(POINT|SET_END|MATCH_END)$/.test(e.type) && e.set === match.setNumber && !e.undone) {
+        e.undone = 'minus 1'; saveEvents(); return i;
+      }
+    }
+    return null;
   }
 
   function currentBannerTitle() {
@@ -402,24 +506,70 @@
         else askHow(side, index, servedBefore === side);
         break;
       }
-      case 'minus': commit(M.removePoint(match, side), side); break;
+      case 'minus': commit(M.removePoint(match, side), side); pumpPlays(); break;
       case 'serve': commit(M.setServing(match, side), side); break;
-      case 'timeout': commit(M.timeout(match, side), side); break;
+      case 'timeout': {
+        const res = M.timeout(match, side);
+        if (!res.type) {
+          toast(match.matchOver ? 'The match is over' : M.name(match, side) + ' has used all ' + M.timeoutLimit(match.format) + ' timeouts this set');
+          break;
+        }
+        closeHow();
+        commit(res, side);
+        askTimeoutScreen(side);
+        break;
+      }
     }
+  }
+
+  // ---------------------------------------------------------------- timeout screen
+  function askTimeoutScreen(side) {
+    const limit = M.timeoutLimit(match.format);
+    $('toQ').textContent = 'Timeout · ' + M.name(match, side).toUpperCase() + (limit > 0 ? ' · ' + M.timeouts(match, side) + ' of ' + limit + ' used' : '') +
+      '. Put the timeout screen on the video?';
+    $('tobar').dataset.side = side;
+    $('tobar').classList.remove('hidden');
+    clearTimeout(toTimer);
+    toTimer = setTimeout(closeTimeoutBar, 10000);
+  }
+  function closeTimeoutBar() { clearTimeout(toTimer); $('tobar').classList.add('hidden'); }
+
+  function showTimeoutScreen() {
+    const side = $('tobar').dataset.side;
+    closeTimeoutBar();
+    if (!match || !side) return;
+    const card = { type: 'timeout', title: '', message: M.name(match, side) + ' timeout', seconds: 30 };
+    cardToSend = card;
+    render();
+    queueSave();
+    toast('Timeout screen on · it goes away after 30 s or on the next point');
+    clearTimeout(toCardTimer);
+    toCardTimer = setTimeout(() => {   // gone when the 30 s are up
+      const c = currentCard();
+      if (c && c.type === 'timeout' && c.message === card.message) { cardToSend = null; render(); queueSave(); }
+    }, 31000);
   }
 
   function undo() {
     closeHow();
+    closeTimeoutBar();
     const prev = undoStack.pop();
     if (!prev) { toast('Nothing to undo'); return; }
+    const undoneTimeout = match && (match.homeTimeouts > prev.match.homeTimeouts || match.awayTimeouts > prev.match.awayTimeouts);
     match = prev.match;
     style = prev.style;
     bannerToSend = null; // an undone set or timeout shouldn't leave its banner up
+    const c = currentCard();
+    if (undoneTimeout && c && c.type === 'timeout') cardToSend = null;
+    // In the log: the undone point is marked; undoing a −1 gives its point back.
+    if (prev.eventIndex != null && events[prev.eventIndex] && /^(POINT|SET_END|MATCH_END)$/.test(events[prev.eventIndex].type)) events[prev.eventIndex].undone = 'undo';
+    if (prev.removed != null && events[prev.removed]) events[prev.removed].undone = '';
     events.push({ time: new Date().toISOString(), type: 'UNDO', side: '', set: match.setNumber, home: match.home, away: match.away,
       setsHome: M.setsWon(match, 'home'), setsAway: M.setsWon(match, 'away'), serving: match.serving || '', homeName: match.homeName, awayName: match.awayName });
     saveEvents();
     render();
     queueSave();
+    pumpPlays();
     toast('Undone');
   }
 
@@ -446,6 +596,7 @@
         if (bannerToSend === banner) bannerToSend = undefined;
         if (cardToSend === card) cardToSend = undefined;
         if (playToSend === play) playToSend = undefined;
+        if (play) { playOnAirAt = Date.now(); setTimeout(pumpPlays, 0); }
         render();
         if (changes === sentChanges) dirty = false;
         setSync(dirty ? 'SAVING' : 'SAVED', dirty ? 'busy' : 'ok');
@@ -513,9 +664,11 @@
   function openSetup() {
     const s = match || M.newMatch('Robins', 'Opponent', M.DEFAULT_FORMAT, null);
     draft = Object.assign({}, style, {
-      homeName: s.homeName, awayName: s.awayName, format: s.format,
+      homeName: s.homeName, awayName: s.awayName, format: M.normFormat(s.format),
       firstServe: match ? (match.serving || '') : '',
     });
+    draft.capOver = draft.format.capOver;
+    draft.timeouts = M.timeoutLimit(draft.format);
     fillSetup();
     show('setup');
   }
@@ -578,8 +731,9 @@
     $('awayColorIn').value = draft.awayColor || '#3A5A8C';
     const fmt = $('formatIn');
     fmt.innerHTML = M.PRESETS.map(p => '<option value="' + p.id + '">' + esc(p.label) + '</option>').join('');
-    const preset = M.PRESETS.find(p => M.sameFormat(p.format, draft.format));
+    const preset = M.presetFor(draft.format);
     fmt.value = preset ? preset.id : M.PRESETS[0].id;
+    fillCap();
     chips('serveChips', [{ label: 'Home', value: 'home' }, { label: 'Away', value: 'away' }, { label: 'Decide later', value: '' }],
       draft.firstServe, v => { draft.firstServe = v; fillSetup(); });
     chips('cornerChips', [{ label: 'Top left', value: 'tl' }, { label: 'Top right', value: 'tr' }, { label: 'Bottom left', value: 'bl' }, { label: 'Bottom right', value: 'br' }],
@@ -594,6 +748,21 @@
     $('eventIn').value = draft.eventTitle || '';
   }
 
+  function fillCap() {
+    const p = M.PRESETS.find(x => x.id === $('formatIn').value) || M.PRESETS[0];
+    const t = p.format.pointsPerSet, d = p.format.decidingSetPoints;
+    const deciding = p.format.maxSets > 1 && p.format.maxSets % 2 === 1;
+    chips('capChips', M.CAP_CHOICES.map(v => ({ label: v ? '+' + v + ' (' + (t + v) + ')' : 'No cap', value: v })),
+      M.CAP_CHOICES.indexOf(draft.capOver) >= 0 ? draft.capOver : -1,
+      v => { draft.capOver = v; $('capIn').value = ''; fillCap(); });
+    if (M.CAP_CHOICES.indexOf(draft.capOver) < 0 && document.activeElement !== $('capIn')) $('capIn').value = draft.capOver;
+    $('capNote').textContent = draft.capOver > 0
+      ? 'A set ends at ' + (t + draft.capOver) + ' even without a 2-point lead' + (deciding && d !== t ? ' (deciding set at ' + (d + draft.capOver) + ').' : '.')
+      : 'No cap: a set goes on until someone leads by 2.';
+    chips('toChips', M.TIMEOUT_CHOICES.map(v => ({ label: v ? String(v) : 'Unlimited', value: v })), draft.timeouts,
+      v => { draft.timeouts = v; fillCap(); });
+  }
+
   function readSetupFields() {
     draft.homeName = $('homeNameIn').value.trim() || 'ROBINS';
     draft.awayName = $('awayNameIn').value.trim() || 'OPPONENT';
@@ -603,7 +772,10 @@
         draft[side + 'Color'] = v; draft[side + 'Accent'] = ''; draft[side + 'Kit'] = null;
       }
     });
-    draft.format = M.PRESETS.find(p => p.id === $('formatIn').value).format;
+    const typed = parseInt($('capIn').value, 10);
+    if (typed > 0 && typed <= 30) draft.capOver = typed;
+    draft.format = Object.assign({}, M.PRESETS.find(p => p.id === $('formatIn').value).format,
+      { capOver: draft.capOver || 0, timeoutsPerSet: draft.timeouts });
     draft.eventTitle = $('eventIn').value.trim();
   }
 
@@ -625,7 +797,9 @@
       bannerToSend = null;
       events = [];
       record('NEW_MATCH', '');
+      playQueue = [];
       toast('New match: ' + match.homeName + ' vs ' + match.awayName);
+      if (A.store('robinsScore.tipsHide') !== '1') { render(); queueSave(); showTips(); return; }
     } else {
       if (!match) { applySetup(true); return; }
       undoStack.push({ match, style });
@@ -701,7 +875,7 @@
   const KIND_LABEL = { KILL: 'Kill', ACE: 'Ace', BLOCK: 'Block', OPP_ERROR: 'Opponent error' };
 
   function askHow(side, eventIndex, canAce) {
-    how = { side, eventIndex, canAce };
+    how = { side, eventIndex, canAce, mark: { side, total: totalPoints(match, side), homeName: match.homeName, awayName: match.awayName } };
     $('howQ').textContent = 'How did ' + M.name(match, side).toUpperCase() + ' score?';
     $('howAce').classList.toggle('hidden', !canAce);
     document.querySelector('#how .opts').style.gridTemplateColumns = 'repeat(' + (canAce ? 5 : 4) + ', 1fr)';
@@ -762,11 +936,39 @@
 
   function sendPlay(number, name) {
     tagEvent(number, name);
-    playToSend = { kind: how.kind, side: how.side, number: number || '', name: name ? M.lastName(name) : '',
-      id: Math.random().toString(36).slice(2, 10) };
+    const waiting = playQueue.length + (playToSend ? 1 : 0) + (Date.now() - playOnAirAt < PLAY_GAP ? 1 : 0);
+    playQueue.push({ kind: how.kind, side: how.side, number: number || '', name: name ? M.lastName(name) : '',
+      id: Math.random().toString(36).slice(2, 10), mark: how.mark, queuedAt: Date.now() });
     show(null);
-    queueSave();
-    toast(KIND_LABEL[how.kind] + (number ? ' · #' + number : '') + (name ? ' ' + M.lastName(name) : '') + ' on screen');
+    pumpPlays();
+    const what = KIND_LABEL[how.kind] + (number ? ' · #' + number : '') + (name ? ' ' + M.lastName(name) : '');
+    toast(waiting ? what + ' is next in line (' + waiting + ' ahead)' : what + ' on screen');
+  }
+
+  /** A play still counts while its point stands (not undone, not taken off with −1, same match). */
+  function stillStands(mark) { return !mark || (match && totalPoints(match, mark.side) >= mark.total && match.homeName === mark.homeName && match.awayName === mark.awayName); }
+
+  /** Sends the next waiting play once the last one has had its turn on the video. */
+  function pumpPlays() {
+    clearTimeout(pumpTimer);
+    const now = Date.now();
+    playQueue = playQueue.filter(p => stillStands(p.mark) && now - p.queuedAt < PLAY_MAX_WAIT);
+    if (playQueue.length && playToSend === undefined) {
+      const wait = Math.max(playOnAirAt + PLAY_GAP - now, currentCard() ? 1000 : 0);   // break screens hide plays: wait them out
+      if (wait > 0) pumpTimer = setTimeout(pumpPlays, wait);
+      else {
+        const p = playQueue.shift();
+        playToSend = { kind: p.kind, side: p.side, number: p.number, name: p.name, id: p.id };
+        queueSave();
+      }
+    }
+    renderQueue();
+  }
+
+  function renderQueue() {
+    const n = playQueue.length;
+    $('queuePill').classList.toggle('hidden', !n);
+    $('queuePill').textContent = n + ' PLAY' + (n === 1 ? '' : 'S') + ' WAITING · SKIP';
   }
 
   $('playerList').addEventListener('click', e => {
@@ -845,7 +1047,7 @@
   function sendBanner(b) { bannerToSend = b; queueSave(); }
 
   function downloadCsv() {
-    const cols = ['time', 'type', 'side', 'kind', 'number', 'player', 'set', 'home', 'away', 'setsHome', 'setsAway', 'serving', 'homeName', 'awayName'];
+    const cols = ['time', 'type', 'side', 'kind', 'number', 'player', 'undone', 'set', 'home', 'away', 'setsHome', 'setsAway', 'serving', 'homeName', 'awayName'];
     const q = v => { const s = String(v == null ? '' : v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
     const csv = [cols.join(',')].concat(events.map(e => cols.map(c => q(e[c])).join(','))).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
@@ -856,6 +1058,10 @@
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(a.href), 4000);
   }
+
+  // ---------------------------------------------------------------- tips
+  function showTips() { $('tipsHide').checked = A.store('robinsScore.tipsHide') === '1'; show('tips'); }
+  function tipsDone() { A.store('robinsScore.tipsHide', $('tipsHide').checked ? '1' : null); show(null); }
 
   // ---------------------------------------------------------------- scorer code
   function askKey(message) {
@@ -888,6 +1094,15 @@
       case 'menu': $('overlayUrl').textContent = overlayLink(); fillCardControls(); drawCameraQr(); show('menu'); break;
       case 'how': chooseKind(b.dataset.kind); break;
       case 'howclose': closeHow(); break;
+      case 'toscreen': showTimeoutScreen(); break;
+      case 'toclose': closeTimeoutBar(); break;
+      case 'tips': showTips(); break;
+      case 'tipsdone': tipsDone(); break;
+      case 'clearqueue':
+        if (playQueue.length && confirm('Skip the ' + playQueue.length + ' play' + (playQueue.length === 1 ? '' : 's') + ' waiting for the video?')) {
+          playQueue = []; renderQueue(); toast('Skipped');
+        }
+        break;
       case 'numonly': {
         const n = $('numIn').value.replace(/[^0-9]/g, '');
         if (!n) { toast('Type the jersey number'); break; }
@@ -922,6 +1137,11 @@
     }
   });
   $('keyInput').addEventListener('keydown', e => { if (e.key === 'Enter') saveKey(); });
+  $('formatIn').addEventListener('change', () => { if (draft) fillCap(); });
+  $('capIn').addEventListener('input', () => {
+    const v = parseInt($('capIn').value, 10);
+    if (v > 0 && v <= 30) { draft.capOver = v; fillCap(); }
+  });
 
   $('courtLabel').textContent = 'COURT ' + court.toUpperCase();
   T.load().then(async () => {
