@@ -64,13 +64,19 @@
   .card .pill { position: absolute; left: 50%; transform: translateX(-50%); padding: 10px 26px 6px; border-radius: 999px;
     background: #ECA030; color: #08080A; white-space: nowrap; line-height: 1; }
   .card .setchip { display: inline-block; margin: 0 8px; padding: 6px 14px 3px; border-radius: 8px; background: rgba(250,246,237,.08); }
+  /* Free tier: "Powered by Robins Volleyball Club", small, in the bottom corner away from the scorebug. */
+  #brand { position: absolute; bottom: 14px; right: 20px; left: auto; top: auto; padding: 5px 12px 3px; border-radius: 999px;
+    background: rgba(8, 8, 10, .62); color: rgba(250, 246, 237, .92); font-size: 15px; letter-spacing: .06em; text-transform: uppercase;
+    white-space: nowrap; line-height: 1; }
+  #brand b { color: #ECA030; font-weight: 600; }
+  #brand.left { right: auto; left: 20px; }
   #status { position: fixed; left: 8px; bottom: 6px; font: 600 13px system-ui, sans-serif; color: #fff; background: rgba(0,0,0,.55);
     padding: 3px 8px; border-radius: 6px; display: none; }
   body.preview #status { display: block; }
 </style>
 </head>
 <body>
-<div id="stage"><div id="board"></div><div id="fx"></div><div id="card"></div></div>
+<div id="stage"><div id="board"></div><div id="fx"></div><div id="card"></div><span id="brand" class="c">Powered by <b>Robins Volleyball Club</b></span></div>
 <div id="status">Connecting…</div>
 <script src="config.js"></script>
 <script src="js/match.js"></script>
@@ -81,6 +87,7 @@
   'use strict';
   const M = window.RobinsMatch, T = window.RobinsTeams, A = window.RobinsApi;
   const W = 1280, H = 720;
+  const brand = document.getElementById('brand');
   const GOLD = '#ECA030', CREAM = '#FAF6ED', PANEL = '#1C1C22', BLACK = '#08080A';
   const SVGNS = 'http://www.w3.org/2000/svg';
   const params = new URLSearchParams(location.search);
@@ -164,6 +171,7 @@
     if (!board || !M.isValid(board.match)) { layer.card.textContent = ''; return; }
     const s = board.match;
     const st = styleOf(board);
+    brand.classList.toggle('left', st.corner === 'br');
     const left = st.corner === 'tl' || st.corner === 'bl';
     const top = st.corner === 'tl' || st.corner === 'tr';
     const card = board.card;

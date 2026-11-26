@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#08080A">
+<title>Robins Live · Team kit</title>
+<style>
+  @font-face { font-family: 'Bebas Neue'; src: url('fonts/bebas-neue.woff2') format('woff2'); }
+  @font-face { font-family: 'Barlow Condensed'; font-weight: 600; src: url('fonts/barlow-condensed-600.woff2') format('woff2'); }
+  body { margin: 0; background: #08080A; color: #FAF6ED; font: 500 17px/1.5 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: calc(env(safe-area-inset-top) + 24px) 20px 60px; }
+  h1 { font: 400 44px 'Bebas Neue', sans-serif; letter-spacing: .03em; margin: 8px 0 4px; }
+  h1 span { color: #ECA030; }
+  h2 { font: 600 24px 'Barlow Condensed', sans-serif; color: #ECA030; margin: 28px 0 6px; text-transform: uppercase; letter-spacing: .03em; }
+  a { color: #ECA030; }
+  li { margin: 6px 0; }
+  code { background: #17171c; border-radius: 6px; padding: 1px 6px; font-size: 15px; word-break: break-all; }
+  .box { background: #17171c; border: 1px solid #2a2a31; border-radius: 14px; padding: 12px 16px; margin: 14px 0; }
+  .muted { opacity: .7; font-size: 15px; }
+  pre { white-space: pre-wrap; background: #101014; border-radius: 10px; padding: 12px; font-size: 13px; max-height: 360px; overflow: auto; }
+  img.top { width: 64px; height: 64px; float: right; }
+</style>
+</head>
+<body>
+<main>
+  <img class="top" src="logos/team-robins.webp" alt="">
+  <h1>Robins Live <span>team kit</span></h1>
+  <p>Stream your own matches with a live AVA scoreboard: score on one phone, film on another, and the score, break screens and Kill / Ace / Block animations show up on your YouTube stream. Free, powered by Robins Volleyball Club.</p>
+  <div class="box"><b>What stays with your team:</b> your rosters, jersey colors, scorer code and scoreboard live in <b>your own copy</b> of the kit, in your team's Google account. Robins VBC never sees them.</div>
+
+  <h2>1. Make your copy (10 minutes, once)</h2>
+  <ol>
+    <li>Open the <a href="https://docs.google.com/spreadsheets/d/1yiIs3Vzo13F7iS29xwbF2PmXx-pKIgxulUyCIoJSks0/copy">Robins Live team kit</a> while signed in to your team's Google account and press <b>Make a copy</b>. The scoreboard service (a small Google Apps Script) comes with it.</li>
+    <li><b>Players</b> tab: one row per player, for your team and the teams you play: team (base name), Men or Women, number, name. Put <b>N</b> under <i>Show name on stream</i> for anyone who wants only their number shown.</li>
+    <li><b>Jersey Colors</b> tab (optional): your kits, so the scoreboard uses your colors.</li>
+    <li>Menu <b>Robins Live → 1. Set up</b>. Google asks for permission the first time (the script reads this spreadsheet and keeps your scoreboard); allow it. Your scorer code appears on the Setup tab.</li>
+    <li><b>Extensions → Apps Script → Deploy → New deployment</b>, type <b>Web app</b>, Execute as <b>Me</b>, Who has access <b>Anyone</b>, then Deploy. Copy the web app address (it ends in <code>/exec</code>) into <b>B6</b> on the Setup tab.</li>
+    <li>Menu <b>Robins Live → 2. Show the court links</b>. A scorer link, a camera-phone link and a Tubeist link for each court appear from row 13.</li>
+  </ol>
+
+  <h2>2. At the match</h2>
+  <ul>
+    <li><b>Scorer phone:</b> open your court's scorer link. Pick the teams under Match setup, then tap a team's panel for each point.</li>
+    <li><b>Android camera phone:</b> install <b>Robins Live</b> (Google Play test link from Robins VBC), then open the camera link, or on the scorer page open <b>More → Camera phone</b> and scan the QR code. The app shows <b>COURT 1 · LINKED</b> when it's following the scorer.</li>
+    <li><b>iPhone camera:</b> <a href="https://apps.apple.com/us/app/tubeist/id6740208994">Tubeist</a>, with your court's overlay link under Settings → Overlays.</li>
+    <li><b>YouTube:</b> make an RTMP stream key in YouTube Studio for the Android phone (Robins Live) and select that same key on Studio's <b>Stream</b> page, with Auto-start on. YouTube accepts any key without complaint, so if Studio says "No data" while the phone says LIVE, the key picked in Studio is a different one. Tubeist uses an HLS key.</li>
+  </ul>
+
+  <h2>Keeping it safe</h2>
+  <ul>
+    <li>The scorer and camera links contain your scorer code. Send them only to the people scoring and filming. The Tubeist overlay link has no code in it.</li>
+    <li>Lost a phone or sent a link to the wrong person? <b>Robins Live → Make a new scorer code</b>, then send the new links.</li>
+    <li>Only the two teams in a match are sent to the scorer page, and only to someone with the code.</li>
+    <li>Delete last season's players from the Players tab when the season ends.</li>
+  </ul>
+  <p class="muted"><a href="privacy.html">Privacy</a> · <a href="licenses.html">Licenses</a> · <a href="index.html">Court list</a> · Questions: robinsvbc@gmail.com</p>
+</main>
+</body>
+</html>

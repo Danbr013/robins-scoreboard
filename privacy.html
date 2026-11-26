@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#08080A">
+<title>Robins Live · Privacy policy</title>
+<style>
+  @font-face { font-family: 'Bebas Neue'; src: url('fonts/bebas-neue.woff2') format('woff2'); }
+  @font-face { font-family: 'Barlow Condensed'; font-weight: 600; src: url('fonts/barlow-condensed-600.woff2') format('woff2'); }
+  body { margin: 0; background: #08080A; color: #FAF6ED; font: 500 17px/1.5 system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: calc(env(safe-area-inset-top) + 24px) 20px 60px; }
+  h1 { font: 400 44px 'Bebas Neue', sans-serif; letter-spacing: .03em; margin: 8px 0 4px; }
+  h1 span { color: #ECA030; }
+  h2 { font: 600 24px 'Barlow Condensed', sans-serif; color: #ECA030; margin: 28px 0 6px; text-transform: uppercase; letter-spacing: .03em; }
+  a { color: #ECA030; }
+  li { margin: 6px 0; }
+  code { background: #17171c; border-radius: 6px; padding: 1px 6px; font-size: 15px; word-break: break-all; }
+  .box { background: #17171c; border: 1px solid #2a2a31; border-radius: 14px; padding: 12px 16px; margin: 14px 0; }
+  .muted { opacity: .7; font-size: 15px; }
+  pre { white-space: pre-wrap; background: #101014; border-radius: 10px; padding: 12px; font-size: 13px; max-height: 360px; overflow: auto; }
+  img.top { width: 64px; height: 64px; float: right; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Privacy <span>policy</span></h1>
+  <p class="muted">Robins Live app and the Robins Scoreboard pages · Robins Volleyball Club · Last updated 26 November 2026</p>
+  <p>Robins Live is an Android app for streaming volleyball matches to YouTube with a live scoreboard. The Robins Scoreboard pages (this website) are the scorer page and the scoreboard overlay it uses. This policy says what data they handle and where it goes. Short version: <b>the developer (Robins Volleyball Club) does not receive or keep your data</b>. There are no accounts, ads, analytics or tracking.</p>
+
+  <h2>Camera and microphone</h2>
+  <p>The app uses the camera and microphone only to film the match. The video is sent to YouTube, using the stream key you enter, when you tap GO LIVE, and saved on your phone when you record. YouTube's own terms and privacy policy cover what it does with your stream. A notification shows while the camera is in use in the background.</p>
+
+  <h2>What's stored on your phone</h2>
+  <ul>
+    <li>Your YouTube stream key and scorer code, encrypted with Android's keystore.</li>
+    <li>Your settings, recordings, highlight and lowlight clips, and a score log for each recording (Movies and Documents, in a Robins Live folder). They stay until you delete them or uninstall the app (files in Movies and Documents stay after uninstalling).</li>
+  </ul>
+
+  <h2>Scores, team names and player names</h2>
+  <ul>
+    <li>Each team runs its own live-score service: a Google Apps Script web app inside the team's own Google account (the team kit). The scorer page and the app send it the score, team names, break screens and the stat plays the scorer enters (a jersey number and a player's last name). Anyone with a court's overlay link can read that court's scoreboard, because it's shown on a public stream.</li>
+    <li>Rosters (jersey numbers and names) are kept in the team's own Google Sheet. The scorer page gets only the two teams in a match, and only with the team's scorer code. A team can mark a player "numbers only", and then no name is sent.</li>
+    <li>Robins Volleyball Club runs a service like this for its own team and sees only that.</li>
+  </ul>
+
+  <h2>The Wi-Fi scorer</h2>
+  <p>If you turn on "Allow a second phone to keep score", the app runs a small web page on your local Wi-Fi network or hotspot, protected by a PIN. Nothing from it leaves your network.</p>
+
+  <h2>Services involved</h2>
+  <ul>
+    <li><b>YouTube</b> (Google): your live stream, under your channel and your stream key.</li>
+    <li><b>Google Apps Script and Google Sheets</b>: your team's live-score service and rosters, in your team's Google account.</li>
+    <li><b>GitHub Pages</b>: hosts these web pages. Like any web host, it may log visitors' IP addresses; see GitHub's privacy statement.</li>
+  </ul>
+
+  <h2>Children</h2>
+  <p>The app is made for adult club volleyball and isn't directed at children.</p>
+
+  <h2>Deleting data</h2>
+  <p>Delete recordings and logs from your phone, or uninstall the app. A team's scoreboard and rosters are deleted by that team's admin in its own Google Sheet and Apps Script project.</p>
+
+  <h2>Contact</h2>
+  <p>robinsvbc@gmail.com. If this policy changes, the new version is posted here with a new date.</p>
+</main>
+</body>
+</html>

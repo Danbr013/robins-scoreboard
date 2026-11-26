@@ -63,8 +63,10 @@
   $('courtManual').textContent = 'Court ' + court;
   $('code').textContent = key || '(ask the club for the scorer code)';
   // The service address travels in the link too, so the app is set up exactly like this page (the app only accepts a Google Apps Script address).
-  const backend = (window.ROBINS_CONFIG && window.ROBINS_CONFIG.backend) || '';
-  const service = /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]{20,}\/exec$/.test(backend) ? backend : '';
+  const APPS_SCRIPT = /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]{20,}\/exec$/;
+  const fromLink = (params.get('s') || '').trim();
+  const backend = APPS_SCRIPT.test(fromLink) ? fromLink : ((window.ROBINS_CONFIG && window.ROBINS_CONFIG.backend) || '');
+  const service = APPS_SCRIPT.test(backend) ? backend : '';
   $('service').textContent = service || '(the club address built into Robins Live)';
   const query = 'court=' + encodeURIComponent(court) + (key ? '&k=' + encodeURIComponent(key) : '') +
     (service ? '&s=' + encodeURIComponent(service) : '');
@@ -77,7 +79,9 @@
   if (ios) {
     $('android').classList.add('hidden');
     $('iphone').classList.remove('hidden');
-    $('overlayLink').textContent = new URL('overlay.html?court=' + encodeURIComponent(court), location.href).toString();
+    const ov = new URL('overlay.html?court=' + encodeURIComponent(court), location.href);
+    if (APPS_SCRIPT.test(fromLink)) ov.searchParams.set('s', fromLink);
+    $('overlayLink').textContent = ov.toString();
   }
 </script>
 </body>

@@ -8,10 +8,39 @@
   'use strict';
 
   const cfg = root.ROBINS_CONFIG || {};
-  // A ?backend= override is only honored on this computer (for testing), so a doctored link
-  // can't send a scorer's code to someone else's server.
+  // A ?backend= override is only honored on this computer (for testing).
   const local = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
-  const backend = () => ((local && new URLSearchParams(location.search).get('backend')) || cfg.backend || '').trim();
+  /** What a Google Apps Script web app address looks like. Only those are taken from a link. */
+  const APPS_SCRIPT = /^https:\/\/script\.google\.com\/macros\/s\/[A-Za-z0-9_-]{20,}\/exec$/;
+
+  /**
+   * A team's own live-score service, from ?s= in the link (the team kit's Setup tab makes these links).
+   * Without it the page uses the club's service from config.js.
+   */
+  function teamService() {
+    const s = (new URLSearchParams(location.search).get('s') || '').trim();
+    return APPS_SCRIPT.test(s) ? s : '';
+  }
+  const backend = () => ((local && new URLSearchParams(location.search).get('backend')) || teamService() || cfg.backend || '').trim();
+
+  /**
+   * '' for the club's own service, otherwise a short tag of the team's service. Saved scorer codes and court
+   * state are kept per service, so a code saved for one team is never sent to another team's service.
+   */
+  function serviceTag() {
+    const s = teamService();
+    if (!s) return '';
+    const id = s.split('/s/')[1].replace('/exec', '');
+    return 't' + id.slice(-12) + '.';
+  }
+
+  /** A link to another page of this site that keeps this page's team service. */
+  function link(path) {
+    const u = new URL(path, location.href);
+    const s = teamService();
+    if (s) u.searchParams.set('s', s);
+    return u.toString();
+  }
 
   function court() {
     const c = (new URLSearchParams(location.search).get('court') || '1').trim();
@@ -50,5 +79,5 @@
     return null;
   }
 
-  root.RobinsApi = { backend, court, getBoard, post, store };
+  root.RobinsApi = { backend, court, getBoard, post, store, teamService, serviceTag, link, APPS_SCRIPT };
 })(window);

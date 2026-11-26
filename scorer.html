@@ -315,7 +315,8 @@
   const M = window.RobinsMatch, T = window.RobinsTeams, A = window.RobinsApi;
   const $ = id => document.getElementById(id);
   const court = A.court();
-  const LS = 'robinsScore.' + court + '.';
+  const LS = 'robinsScore.' + A.serviceTag() + court + '.';
+  const KEY_NAME = 'robinsScore.' + A.serviceTag() + 'key';   // one saved code per service
   const clientId = A.store('robinsScore.client') || (function () {
     const id = Math.random().toString(36).slice(2, 10);
     A.store('robinsScore.client', id);
@@ -327,10 +328,10 @@
   const hash = new URLSearchParams(location.hash.slice(1));
   if (hash.get('k')) {
     key = hash.get('k');
-    A.store('robinsScore.key', key);
+    A.store(KEY_NAME, key);
     history.replaceState(null, '', location.pathname + location.search);
   } else {
-    key = A.store('robinsScore.key') || '';
+    key = A.store(KEY_NAME) || '';
   }
 
   // ---------------------------------------------------------------- state
@@ -798,6 +799,7 @@
       events = [];
       record('NEW_MATCH', '');
       playQueue = [];
+      loadRosters(false);
       toast('New match: ' + match.homeName + ' vs ' + match.awayName);
       if (A.store('robinsScore.tipsHide') !== '1') { render(); queueSave(); showTips(); return; }
     } else {
@@ -875,7 +877,12 @@
   const KIND_LABEL = { KILL: 'Kill', ACE: 'Ace', BLOCK: 'Block', OPP_ERROR: 'Opponent error' };
 
   function askHow(side, eventIndex, canAce) {
-    how = { side, eventIndex, canAce, mark: { side, total: totalPoints(match, side), homeName: match.homeName, awayName: match.awayName } };
+    const ev = events[eventIndex] || {};
+    const last = match.completedSets[match.completedSets.length - 1];
+    const rally = ev.type === 'SET_END' && last ? { set: match.setNumber - 1, home: last.home, away: last.away }
+      : { set: match.setNumber, home: match.home, away: match.away };
+    how = { side, eventIndex, canAce, rally,
+      mark: { side, total: totalPoints(match, side), homeName: match.homeName, awayName: match.awayName } };
     $('howQ').textContent = 'How did ' + M.name(match, side).toUpperCase() + ' score?';
     $('howAce').classList.toggle('hidden', !canAce);
     document.querySelector('#how .opts').style.gridTemplateColumns = 'repeat(' + (canAce ? 5 : 4) + ', 1fr)';
@@ -938,7 +945,7 @@
     tagEvent(number, name);
     const waiting = playQueue.length + (playToSend ? 1 : 0) + (Date.now() - playOnAirAt < PLAY_GAP ? 1 : 0);
     playQueue.push({ kind: how.kind, side: how.side, number: number || '', name: name ? M.lastName(name) : '',
-      id: Math.random().toString(36).slice(2, 10), mark: how.mark, queuedAt: Date.now() });
+      id: Math.random().toString(36).slice(2, 10), mark: how.mark, rally: how.rally, queuedAt: Date.now() });
     show(null);
     pumpPlays();
     const what = KIND_LABEL[how.kind] + (number ? ' · #' + number : '') + (name ? ' ' + M.lastName(name) : '');
@@ -958,7 +965,7 @@
       if (wait > 0) pumpTimer = setTimeout(pumpPlays, wait);
       else {
         const p = playQueue.shift();
-        playToSend = { kind: p.kind, side: p.side, number: p.number, name: p.name, id: p.id };
+        playToSend = Object.assign({ kind: p.kind, side: p.side, number: p.number, name: p.name, id: p.id }, p.rally || {});
         queueSave();
       }
     }
@@ -978,11 +985,21 @@
     sendPlay(p.num, p.name);
   });
 
+  /** Names of the two teams playing (with their other spellings), so the service sends only their players. */
+  function matchBases() {
+    const out = [];
+    ['home', 'away'].forEach(side => {
+      const t = T.find(style[side + 'Logo']);
+      if (t) [t.name].concat(t.aliases || []).forEach(n => out.push(n));
+    });
+    return out;
+  }
+
   async function loadRosters(force) {
     if (!key) return;
     try {
       // baseVersion -1 makes a version-1 service refuse this as a save (conflict) instead of storing it.
-      const res = await A.post({ court, key, op: 'rosters', refresh: !!force, baseVersion: -1 }, 30000);
+      const res = await A.post({ court, key, op: 'rosters', refresh: !!force, baseVersion: -1, bases: matchBases() }, 30000);
       if (res.ok && res.league) { rosters = res; rosterError = ''; }
       else rosterError = res.error === 'key' ? 'scorer code' : 'the service needs the version 2 update';
     } catch (e) { rosterError = 'no connection'; }
@@ -1023,6 +1040,7 @@
   function cameraLink() {
     const u = new URL('camera.html', location.href);
     u.search = 'court=' + encodeURIComponent(court);
+    if (A.teamService()) u.searchParams.set('s', A.teamService());
     u.hash = key ? 'k=' + encodeURIComponent(key) : '';
     return u.toString();
   }
@@ -1038,11 +1056,7 @@
     } catch (e) { $('cameraQr').textContent = 'QR unavailable'; }
   }
 
-  function overlayLink() {
-    const u = new URL('overlay.html', location.href);
-    u.search = 'court=' + encodeURIComponent(court);
-    return u.toString();
-  }
+  function overlayLink() { return A.link('overlay.html?court=' + encodeURIComponent(court)); }
 
   function sendBanner(b) { bannerToSend = b; queueSave(); }
 
@@ -1075,7 +1089,7 @@
     if (!k) return;
     try {
       const res = await A.post({ court, key: k, op: 'check' });
-      if (res.ok) { key = k; A.store('robinsScore.key', k); show(null); toast('Scorer code saved on this phone'); if (dirty) flush(); loadRosters(false); return; }
+      if (res.ok) { key = k; A.store(KEY_NAME, k); show(null); toast('Scorer code saved on this phone'); if (dirty) flush(); loadRosters(false); return; }
       $('keyMsg').textContent = 'That code didn’t work.';
     } catch (e) {
       $('keyMsg').textContent = 'Couldn’t reach the live-score service. Check the connection and try again.';
@@ -1132,7 +1146,7 @@
         (navigator.clipboard ? navigator.clipboard.writeText(overlayLink()) : Promise.reject())
           .then(() => toast('Overlay link copied'), () => toast('Press and hold the link to copy it'));
         break;
-      case 'forgetkey': A.store('robinsScore.key', null); key = ''; askKey('Signed out. Enter the scorer code to keep scoring on this phone.'); break;
+      case 'forgetkey': A.store(KEY_NAME, null); key = ''; askKey('Signed out. Enter the scorer code to keep scoring on this phone.'); break;
       case 'savekey': saveKey(); break;
     }
   });
