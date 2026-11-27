@@ -114,7 +114,6 @@
     const teamLogo = (st, side) => logo(side === 'home' ? st.homeLogo : st.awayLogo);
     const numberInk = color => { const l = lum(color); return l > 0.55 || l < 0.02 ? BLACK : color; };
     function darkPanel(x, y, w, h) { c.globalAlpha = 240 / 255; fillRR(x, y, w, h, 12, BLACK); c.globalAlpha = 1; }
-    const lastWord = n => { const w = String(n || '').trim().split(/\s+/); return w[w.length - 1] || ''; };
 
     // ---------------------------------------------------------------- the bar
     const extOpen = (t, len) => Math.min(easeOut(t / 0.35), easeOut((len - t) / 0.3));
@@ -292,7 +291,8 @@
         font('c', 13); spacing(0.08, 13);
         text(label, x, extTop + 17, 'c', 13, ink, 'left', 210 / 255);
         spacing(0, 13);
-        const who = ((m.kind === 'SUB' ? m.name : lastWord(m.name)) || M.name(s, m.side)).toUpperCase();
+        // The scorer page sends the name as it goes on the video (the surname: Del Sordo, Criado Marrero); never cut it again.
+        const who = (String(m.name || '').trim() || M.name(s, m.side)).toUpperCase();
         const size = fitText(who, 30, extRight - (home ? 16 : 12) - x, 'd');
         text(who, x, extTop + BAR_H - 9, 'd', size, ink);
         c.restore();
@@ -506,7 +506,7 @@
         });
       });
       if (best && best.score > 0) {
-        const line = 'TOP  ·  #' + best.num + ' ' + lastWord(best.p.name).toUpperCase() + ' (' + M.name(s, best.side).toUpperCase() + ')  ·  ' + D.statLine(best.p);
+        const line = 'TOP  ·  #' + best.num + ' ' + String(best.p.name || '').toUpperCase() + ' (' + M.name(s, best.side).toUpperCase() + ')  ·  ' + D.statLine(best.p);
         centered(line, 'c', 23, GOLD, x + w / 2, y + h - 46, 40, w - 40);
       }
     }

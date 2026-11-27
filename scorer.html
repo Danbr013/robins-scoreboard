@@ -684,9 +684,9 @@
       const t = out[e.side];
       t[f]++;
       if (e.number) {
-        const p = t.players[e.number] || (t.players[e.number] = { name: M.lastName(e.player || nameFor(e.side, e.number)).slice(0, 20), kills: 0, aces: 0, blocks: 0, digs: 0 });
+        const p = t.players[e.number] || (t.players[e.number] = { name: short(e.player || nameFor(e.side, e.number)).slice(0, 20), kills: 0, aces: 0, blocks: 0, digs: 0 });
         p[f]++;
-        if (!p.name && e.player) p.name = M.lastName(e.player).slice(0, 20);
+        if (!p.name && e.player) p.name = short(e.player).slice(0, 20);
       }
     });
     if (!any) return null;
@@ -719,7 +719,7 @@
     const number = order[turns[match.serving] % 6];
     if (!number) return null;
     const p = rosterFor(match.serving).find(x => x.num === number);
-    return { side: match.serving, number, name: p ? M.lastName(p.name).slice(0, 20) : '' };
+    return { side: match.serving, number, name: p ? short(p.name).slice(0, 20) : '' };
   }
 
   function matchWithExtras() {
@@ -1022,6 +1022,18 @@
     if (e) { e.kind = how.kind; e.number = number || ''; e.player = player || ''; saveEvents(); queueSave(); }   // the stats on the video change
   }
 
+  // ---------------------------------------------------------------- surnames for the video
+  /** Surnames the rosters give outright (Team Hub Players tab for Robins, Last name on stream elsewhere). */
+  let LAST = {};
+  const nameKey = n => String(n || '').replace(/[“"][^”"]*[”"]/g, ' ').toLowerCase().replace(/[^a-z0-9]+/g, '');
+  function learnLastNames(res) {
+    LAST = {};
+    Object.keys(res.lastNames || {}).forEach(k => { if (res.lastNames[k]) LAST[nameKey(k)] = res.lastNames[k]; });
+    (res.league || []).forEach(r => { if (r[5]) LAST[nameKey(r[3])] = r[5]; });
+  }
+  /** The name on the video: the roster's surname when it gives one, else the surname rule (Del Sordo, De La Cruz…). */
+  function short(name) { return LAST[nameKey(name)] || M.lastName(name); }
+
   /** The players for one side: Robins from the Robins Rosters tab, everyone else from League Rosters. */
   function rosterFor(side) {
     const t = T.find(style[side + 'Logo']);
@@ -1064,7 +1076,7 @@
     const counts = {};
     list.forEach(p => { counts[p.num] = (counts[p.num] || 0) + 1; });
     $('playerList').innerHTML = list.map((p, i) =>
-      '<button class="pbtn" data-player="' + i + '"><b>' + (p.num ? esc(p.num) : '–') + '</b><span>' + esc(M.lastName(p.name)) + '</span><small>' +
+      '<button class="pbtn" data-player="' + i + '"><b>' + (p.num ? esc(p.num) : '–') + '</b><span>' + esc(short(p.name)) + '</span><small>' +
       esc(p.name) + (counts[p.num] > 1 && p.num ? ' · same #' : '') + (p.note ? ' · ' + esc(p.note) : '') + '</small></button>').join('');
     $('playerList')._list = list;
     const t = T.find(style[side + 'Logo']);
@@ -1079,11 +1091,11 @@
   function sendPlay(number, name) {
     tagEvent(number, name);
     const waiting = playQueue.length + (playToSend ? 1 : 0) + (Date.now() - playOnAirAt < PLAY_GAP ? 1 : 0);
-    playQueue.push({ kind: how.kind, side: how.side, number: number || '', name: name ? M.lastName(name) : '',
+    playQueue.push({ kind: how.kind, side: how.side, number: number || '', name: name ? short(name) : '',
       id: Math.random().toString(36).slice(2, 10), mark: how.mark, rally: how.rally, queuedAt: Date.now() });
     show(null);
     pumpPlays();
-    const what = KIND_LABEL[how.kind] + (number ? ' · #' + number : '') + (name ? ' ' + M.lastName(name) : '');
+    const what = KIND_LABEL[how.kind] + (number ? ' · #' + number : '') + (name ? ' ' + short(name) : '');
     toast(waiting ? what + ' is next in line (' + waiting + ' ahead)' : what + ' on screen');
   }
 
@@ -1194,7 +1206,7 @@
         openPlayersFor(side, 'Sub · who goes OUT for #' + (inNum || '?') + '?', (outNum, outName) => {
           if (lu && outNum && lu[side].indexOf(outNum) >= 0) { lu[side][lu[side].indexOf(outNum)] = inNum; saveLineups(); }
           const nameOf = (num, nm) => nm || ((rosterFor(side).find(p => p.num === num) || {}).name || '');
-          queuePlay('SUB', side, inNum, M.lastName(nameOf(inNum, inName)), { out: outNum || '', outName: M.lastName(nameOf(outNum, outName)) },
+          queuePlay('SUB', side, inNum, short(nameOf(inNum, inName)), { out: outNum || '', outName: short(nameOf(outNum, outName)) },
             'Sub #' + (inNum || '?') + ' for #' + (outNum || '?'));
         }, onCourt);
       });
@@ -1218,7 +1230,7 @@
           homeName: match.homeName, awayName: match.awayName, kind: 'DIG', number: num || '', player: name || '' });
         saveEvents();
         queueSave();
-        queuePlay('DIG', side, num, name ? M.lastName(name) : '', null, 'Dig' + (num ? ' · #' + num : ''));
+        queuePlay('DIG', side, num, name ? short(name) : '', null, 'Dig' + (num ? ' · #' + num : ''));
       });
     });
   }
@@ -1238,7 +1250,7 @@
     try {
       // baseVersion -1 makes a version-1 service refuse this as a save (conflict) instead of storing it.
       const res = await A.post({ court, key, op: 'rosters', refresh: !!force, baseVersion: -1, bases: matchBases() }, 30000);
-      if (res.ok && res.league) { rosters = res; rosterError = ''; }
+      if (res.ok && res.league) { rosters = res; rosterError = ''; learnLastNames(res); }
       else rosterError = res.error === 'key' ? 'scorer code' : 'the service needs the version 2 update';
     } catch (e) { rosterError = 'no connection'; }
     if (!$('players').classList.contains('hidden') && lastShown) showPlayers.apply(null, lastShown);

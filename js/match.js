@@ -221,10 +221,31 @@
     return luminance(hex) > 0.33 ? '#08080A' : '#FAF6ED';
   }
 
-  /** "Julius “Buck” Tolliver" → "Tolliver", for the player card. */
+  /** Words that belong with the surname after them: Del Sordo, De La Cruz, Van Asch, San Nicolas, Della Pia. */
+  const PARTICLES = ['de', 'del', 'della', 'dela', 'delos', 'la', 'las', 'los', 'le', 'van', 'von', 'der', 'den', 'ter', 'ten',
+    'da', 'das', 'do', 'dos', 'di', 'du', 'san', 'santa', 'st', 'st.', 'ste', 'saint', 'al', 'el', 'bin', 'ibn'];
+
+  /**
+   * The surname for the video: "Julius “Buck” Tolliver" → "Tolliver", "Giovanna “G” Del Sordo" → "Del Sordo",
+   * "Sheila De La Cruz" → "De La Cruz", "Roberto Manuel Guillen Jr" → "Guillen". Double surnames with no particle
+   * ("Criado Marrero") can't be told from a middle name, so rosters can give the surname outright (Last name on stream).
+   * Film Room uses the same rule (scoring.stream_last). The app and the overlay show names as the scorer page sends them.
+   */
   function lastName(full) {
-    const words = String(full || '').replace(/[“"][^”"]*[”"]/g, ' ').replace(/\s+(Jr\.?|Sr\.?|II|III|IV)$/i, '').trim().split(/\s+/);
-    return words.length ? words[words.length - 1] : '';
+    let text = String(full || '').replace(/[“"][^”"]*[”"]/g, ' ').replace(/\([^)]*\)/g, ' ').replace(/\s+-\s+/g, '-');
+    const comma = text.indexOf(',');
+    if (comma >= 0) {
+      const before = text.slice(0, comma).trim(), after = text.slice(comma + 1).trim();
+      // "Faapaia, Ioane": surname first. ("Smith, Jr." is just a suffix.)
+      if (before && after && !/^(jr\.?|sr\.?|ii|iii|iv)$/i.test(after)) return before.split(/\s+/).join(' ');
+      text = before || after;
+    }
+    const words = text.trim().split(/\s+/).filter(Boolean);
+    while (words.length > 1 && /^(jr\.?|sr\.?|ii|iii|iv)$/i.test(words[words.length - 1])) words.pop();
+    if (!words.length) return '';
+    let i = words.length - 1;
+    while (i > 0 && PARTICLES.indexOf(words[i - 1].toLowerCase()) >= 0) i--;
+    return words.slice(i).join(' ');
   }
 
   /** True for a complete match state (guards against old or damaged saved boards). */
