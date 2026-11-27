@@ -18,9 +18,8 @@
   const BAR_X = (W - BAR_W) / 2;
   const EXT_W = 280, PANEL_W = 560, PANEL_H = 170, BOX_BOTTOM = 690;
   const BLACK = '#08080A', RED = '#BE121C', GOLD = '#ECA030', CREAM = '#FAF6ED', PANEL = '#1C1C22';
-  const PLAY_WORDS = { KILL: 'KILL!', ACE: 'ACE!', BLOCK: 'BLOCK!' };
   const STAT_ROWS = [['kills', 'KILLS'], ['aces', 'ACES'], ['blocks', 'BLOCKS']];
-  const ONE = { KILL: 'KILL', ACE: 'ACE', BLOCK: 'BLOCK' };
+  const ICE = '#BFE9FF', ICE_DEEP = '#0E3A5C';
   // Team logos sit on a dark plate (their own colours show true; a light plate washed some of them out).
   const PLATE = '#131317', PLATE_EDGE = 'rgba(250,246,237,.18)';
   const FACES = { d: '"Bebas Neue", "Oswald", "Arial Narrow", sans-serif', c: '600 X "Barlow Condensed", "Arial Narrow", sans-serif' };
@@ -28,6 +27,18 @@
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const easeOut = x => { const c = clamp(x, 0, 1); return 1 - (1 - c) * (1 - c) * (1 - c); };
   const easeInOut = x => { const c = clamp(x, 0, 1); return c < 0.5 ? 4 * c * c * c : 1 - Math.pow(-2 * c + 2, 3) / 2; };
+  const easeIn = x => { const c = clamp(x, 0, 1); return c * c * c; };
+  const easeOutBack = x => { const c = clamp(x, 0, 1) - 1; return 1 + 2.70158 * c * c * c + 1.70158 * c * c; };
+  /** mulberry32: the same frost, flakes and streaks every time (and in the app's port). */
+  function rng(seed) {
+    let a = seed >>> 0;
+    return () => {
+      a = (a + 0x6D2B79F5) >>> 0;
+      let t = Math.imul(a ^ (a >>> 15), a | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
 
   function rgb(hex) {
     const m = /^#?([0-9a-f]{6})$/i.exec(hex || '');
@@ -229,6 +240,11 @@
         centerTag('TIED ' + m.count + '–' + m.count, CREAM, BLACK, tag.t, tag.length, baseY - 30);
       } else if (m.kind === 'CORRECTED') {
         centerTag('SCORE CORRECTED', GOLD, BLACK, tag.t, tag.length, baseY - 30);
+      } else if (m.kind === 'RUN_STOPPED' && m.side) {
+        const col = teamColor(st, m.side);
+        sideTag(layout, m.side, 'RUN STOPPED', 'ENDS A ' + m.count + '\u20130 RUN', col, textOn(col), tag.t, tag.length, baseY);
+      } else if (m.kind === 'SAVED') {
+        centerTag(m.word, GOLD, BLACK, tag.t, tag.length, baseY - 30);
       }
     }
 
@@ -294,23 +310,35 @@
           centered(m.number, 'd', 34, numberInk(color), x + 25, extTop + 6, BAR_H - 12, 46);
           x += 60;
         }
-        const label = m.kind === 'SERVER' ? 'SERVING' : m.kind === 'SUB' ? 'SUBSTITUTION' : m.kind === 'MILESTONE' ? 'MILESTONE' : (ONE[m.word] || m.word);
-        font('c', 13); spacing(0.08, 13);
-        text(label, x, extTop + 17, 'c', 13, ink, 'left', 210 / 255);
+        const label = m.kind === 'SERVER' ? 'SERVING' : m.kind === 'SUB' ? 'SUBSTITUTION' : m.kind === 'MILESTONE' ? 'MILESTONE'
+          : m.kind === 'PLAY' ? playLabel(m) : m.word;
+        spacing(0.08, 13);
+        const ls = fitText(label, 13, extRight - 14 - x, 'c');
+        text(label, x, extTop + 17, 'c', ls, ink, 'left', 210 / 255);
         spacing(0, 13);
         // The scorer page sends the name as it goes on the video (the surname: Del Sordo, Criado Marrero); never cut it again.
         const who = (String(m.name || '').trim() || M.name(s, m.side)).toUpperCase();
         const size = fitText(who, 30, extRight - (home ? 16 : 12) - x, 'd');
         text(who, x, extTop + BAR_H - 9, 'd', size, ink);
+        // A play's tag gets a gold glint across it as it lands.
+        if (m.kind === 'PLAY' && t >= 0.3 && t <= 0.95) {
+          const q = easeInOut((t - 0.3) / 0.65);
+          const gx = extLeft - 80 + q * (EXT_W + 160), skew = 18;
+          c.globalAlpha = 0.55;
+          c.fillStyle = hgrad(gx - 30, gx + 30, ['rgba(236,160,48,0)', GOLD, 'rgba(236,160,48,0)']);
+          c.beginPath(); c.moveTo(gx - 30 + skew, extTop); c.lineTo(gx + 30 + skew, extTop);
+          c.lineTo(gx + 30 - skew, extTop + BAR_H); c.lineTo(gx - 30 - skew, extTop + BAR_H); c.closePath(); c.fill();
+          c.globalAlpha = 1;
+        }
         c.restore();
       }
-      const panelH = m.kind === 'SERVER' ? (m.detail ? 84 : 0) : m.kind === 'SUB' ? 124 : PANEL_H;
+      // A play has no panel: a statement play already had the whole screen, a point play is only the tag.
+      const panelH = m.kind === 'SERVER' ? (m.detail ? 84 : 0) : m.kind === 'SUB' ? 124 : m.kind === 'PLAY' ? 0 : PANEL_H;
       if (panelOpen <= 0 || panelH <= 0) return;
       const left = home ? extLeft : extRight - PANEL_W, right = left + PANEL_W, bottom = extTop - 8, top = bottom - panelH;
       c.save();
       clip(left, bottom - panelH * panelOpen, PANEL_W, panelH * panelOpen);
-      if (m.kind === 'PLAY') drawPlayPanel(left, top, PANEL_W, panelH, m, color, ink, t, st);
-      else if (m.kind === 'MILESTONE') drawMilestonePanel(left, top, PANEL_W, panelH, m, color);
+      if (m.kind === 'MILESTONE') drawMilestonePanel(left, top, PANEL_W, panelH, m, color);
       else if (m.kind === 'SERVER') {
         darkPanel(left, top, PANEL_W, panelH);
         fillRect(left, top + 10, 8, panelH - 20, color);
@@ -323,46 +351,13 @@
       c.restore();
     }
 
-    function drawPlayPanel(x, y, w, h, m, color, ink, t, st) {
-      c.fillStyle = grad(x, y, x + w, y + h, [color, darker(color, 0.7)]);
-      rr(x, y, w, h, 10); c.fill();
-      c.save();
-      rr(x, y, w, h, 10); c.clip();
-      const img = teamLogo(st, m.side);
-      if (img) fit(img, x + w - h * 1.15, y - 10, h * 1.15 + 10, h + 20, false, 46 / 255);
-      // Gold slash sweeping across (0.35–1.25 s).
-      if (t >= 0.35 && t <= 1.25) {
-        const q = easeInOut((t - 0.35) / 0.9);
-        const sx = x - 0.5 * w + q * 1.8 * w, sw = 0.3 * w, skew = Math.tan(18 * Math.PI / 180) * h;
-        c.globalAlpha = 240 / 255;
-        c.fillStyle = GOLD;
-        c.beginPath();
-        c.moveTo(sx + skew / 2, y - 2); c.lineTo(sx + sw + skew / 2, y - 2);
-        c.lineTo(sx + sw - skew / 2, y + h + 2); c.lineTo(sx - skew / 2, y + h + 2); c.closePath(); c.fill();
-        c.globalAlpha = 1;
-      }
-      const word = PLAY_WORDS[m.word] || m.word + '!';
-      // 0.35–1.4 s: the word, big and centred. Then it settles top left over the count.
-      const settle = easeInOut((t - 1.4) / 0.45);
-      const size = 132 + (80 - 132) * settle;
-      const cx = x + w / 2 + ((x + 24) - (x + w / 2)) * settle;
-      const inA = easeOut((t - 0.3) / 0.25);
-      const s2 = Math.min(size, fitText(word, size, w - 40, 'd'));
-      const wordY = y + h / 2 + (y + 74 - (y + h / 2)) * settle;
-      c.save();
-      c.translate(settle > 0.5 ? x + 24 : cx, wordY);
-      c.transform(1, 0, -0.14, 1, 0, 0);
-      font('d', s2);
-      const mm = c.measureText(word);
-      const a = mm.fontBoundingBoxAscent != null ? mm.fontBoundingBoxAscent : s2 * 0.9;
-      const d = mm.fontBoundingBoxDescent != null ? mm.fontBoundingBoxDescent : s2 * 0.25;
-      text(word, 0, (a - d) / 2, 'd', s2, ink, settle > 0.5 ? 'left' : 'center', inA);
-      c.restore();
-      if (settle > 0 && m.count > 0) {
-        const line = D.ordinal(m.count) + ' ' + (ONE[m.word] || m.word) + ' THIS MATCH';
-        text(line, x + 28, y + h - 30, 'c', 30, ink, 'left', settle * 0.92);
-      }
-      c.restore();
+    /** The small line on a play's tag: 3RD KILL THIS MATCH after a statement play, ROLL SHOT · 4TH KILL for a point play. */
+    function playLabel(m) {
+      const play = M.playOf(m.word);
+      if (!play) return m.word;
+      const one = (D.statForPlay(m.word) || [])[2] || play.label;
+      if (m.statement) return m.count > 0 ? D.ordinal(m.count) + ' ' + one + ' THIS MATCH' : play.label;
+      return play.label + (m.count > 0 ? '  \u00b7  ' + D.ordinal(m.count) + ' ' + one : '');
     }
 
     function drawMilestonePanel(x, y, w, h, m, color) {
@@ -396,6 +391,358 @@
       };
       row(0, 'IN', m.number, m.name, '#1E8E4E');
       row(1, 'OUT', m.out, m.outName, RED);
+    }
+
+    // ---------------------------------------------------------------- takeovers: statement plays and ICED
+    function drawTakeover(s, st, shown) {
+      if (!shown.moment.side) return;
+      if (shown.kind === 'ICED') iced(s, st, shown);
+      else statement(s, st, shown);
+    }
+
+    /** Text with no entry in texts() (trails and shadows of a word that is drawn once for real). */
+    function ghost(value, x, y, color, alpha) {
+      const a = c.globalAlpha;
+      c.globalAlpha = a * alpha;
+      c.fillStyle = color;
+      c.fillText(value, x, y);
+      c.globalAlpha = a;
+    }
+    /** Baseline that centres the current font's capitals on y = 0. */
+    function midline(word) {
+      const mm = c.measureText(word);
+      const a = mm.actualBoundingBoxAscent != null ? mm.actualBoundingBoxAscent : 0.7 * parseFloat(c.font);
+      const d = mm.actualBoundingBoxDescent != null ? mm.actualBoundingBoxDescent : 0;
+      return (a - d) / 2;
+    }
+    function diamond(x, y, r, color) {
+      c.fillStyle = color;
+      c.beginPath(); c.moveTo(x, y - r); c.lineTo(x + r * 0.72, y); c.lineTo(x, y + r); c.lineTo(x - r * 0.72, y); c.closePath(); c.fill();
+    }
+
+    // KILL! / ACE! / MONSTER BLOCK!: a slanted band in the team's color across the screen for TAKEOVER_S.
+    const BAND_Y = 316, BAND_H = 226, BAND_TILT = -4 * Math.PI / 180;
+    function statement(s, st, shown) {
+      const m = shown.moment, t = shown.t, L = D.TAKEOVER_S;
+      const play = M.playOf(m.word) || { word: m.word + '!' };
+      const color = teamColor(st, m.side), ink = textOn(color);
+      const home = m.side === 'home', dir = home ? 1 : -1;
+      const monster = m.word === 'MONSTER', ace = m.word === 'ACE';
+      // The kill and ace bands fly in from the team's own side; the monster block comes down like a roof.
+      const inP = monster ? easeIn(t / 0.22) : easeOut(t / 0.28);
+      const outP = easeIn((t - (L - 0.34)) / 0.34);
+      const hit = monster ? 0.22 : 0.3;
+      const since = t - hit;
+      const decay = since > 0 ? Math.max(0, 1 - since / (monster ? 0.55 : 0.32)) : 0;
+      const amp = monster ? 17 : 7;
+      const shakeX = decay * amp * Math.sin(since * 95), shakeY = decay * amp * 0.6 * Math.cos(since * 120);
+      const bw = 2100, bh = BAND_H;
+
+      c.save();
+      const dim = 0.34 * Math.min(easeOut(t / 0.2), 1 - outP);
+      if (dim > 0) { c.fillStyle = grad(0, 0, 0, BAR_Y - 16, ['rgba(0,0,0,' + dim + ')', 'rgba(0,0,0,' + dim * 0.8 + ')', 'rgba(0,0,0,0)']); c.fillRect(0, 0, W, BAR_Y - 16); }
+      c.translate(CENTER_X + shakeX, BAND_Y + shakeY);
+      c.rotate(BAND_TILT);
+      if (monster) c.translate(0, -(1 - inP) * 640 - outP * 640);
+      else c.translate(-dir * (1 - inP) * 1900 + dir * outP * 1900, 0);
+
+      // The band: team color, faint stripes, the logo as a watermark, gold edges.
+      c.fillStyle = hgrad(-bw / 2, bw / 2, home ? [color, darker(color, 0.55)] : [darker(color, 0.55), color]);
+      c.globalAlpha = 0.97; c.fillRect(-bw / 2, -bh / 2, bw, bh); c.globalAlpha = 1;
+      c.save();
+      clip(-bw / 2, -bh / 2, bw, bh);
+      c.fillStyle = 'rgba(255,255,255,0.055)';
+      for (let x = -bw / 2; x < bw / 2; x += 46) {
+        c.beginPath(); c.moveTo(x, -bh / 2); c.lineTo(x + 22, -bh / 2); c.lineTo(x + 22 - bh * 0.45, bh / 2); c.lineTo(x - bh * 0.45, bh / 2); c.closePath(); c.fill();
+      }
+      const img = teamLogo(st, m.side);
+      if (img) fit(img, home ? 360 : -360 - 280, -bh / 2 - 24, 280, bh + 48, false, 0.13);
+      if (!ace && !monster) streaks(t, dir, bh);
+      c.restore();
+      fillRect(-bw / 2, -bh / 2 - 7, bw, 7, GOLD);
+      fillRect(-bw / 2, bh / 2, bw, 7, GOLD);
+      c.globalAlpha = 0.75;
+      fillRect(-bw / 2, -bh / 2 - 18, bw, 2, CREAM);
+      fillRect(-bw / 2, bh / 2 + 16, bw, 2, CREAM);
+      c.globalAlpha = 1;
+
+      if (ace) aceCard(t, m, color);
+      // The word slams in (with a speed trail for a kill), then shakes on impact.
+      const wordX = ace ? 104 : 0, wordY = -34;
+      const slam = easeOut((t - (monster ? 0.2 : 0.16)) / 0.18);
+      if (slam > 0) {
+        const word = play.word;
+        const k = 1 + (monster ? 1.1 : 1.35) * (1 - slam);
+        const size = fitText(word, 184, ace ? 840 : 1150, 'd');
+        c.save();
+        c.translate(wordX, wordY); c.scale(k, k); c.transform(1, 0, -0.14, 1, 0, 0);
+        font('d', size); c.textAlign = 'center';
+        const by = midline(word);
+        if (!monster && slam < 1) for (let i = 3; i >= 1; i--) ghost(word, -dir * i * 40 * (1 - slam), by, ink, 0.2 * slam);
+        ghost(word, 7, by + 7, 'rgba(0,0,0,0.38)', slam);
+        text(word, 0, by, 'd', size, ink, 'center', slam);
+        c.restore();
+      }
+      // Who did it (a cream strip: it reads on any team color), with what the point meant (5–0 RUN, SAVES SET POINT…).
+      const nameP = easeOut((t - 0.5) / 0.24);
+      if (nameP > 0) {
+        const who = (String(m.name || '').trim() || M.name(s, m.side)).toUpperCase();
+        const num = m.number ? String(m.number) : '';
+        const h = 56, top = 44;
+        font('d', 44); const chipW = num ? Math.max(h - 12, measure(num) + 18) : 0;
+        const nameSize = fitText(who, 46, 560, 'd'); font('d', nameSize); const whoW = measure(who);
+        const more = m.context || '';
+        font('c', 26); spacing(0.06, 26); const moreW = more ? measure(more) + 34 : 0; spacing(0, 26);
+        const stripW = (num ? chipW + 14 : 0) + whoW + 36, total = stripW + (more ? moreW + 12 : 0);
+        const left = wordX - total / 2;
+        c.save();
+        c.translate(dir * (1 - nameP) * 120, 0);
+        c.globalAlpha = nameP;
+        fillRR(left + 5, top + 6, stripW, h, 8, 'rgba(0,0,0,0.35)');
+        fillRR(left, top, stripW, h, 8, CREAM);
+        let x = left + 8;
+        if (num) {
+          fillRR(x, top + 6, chipW, h - 12, 6, GOLD);
+          centered(num, 'd', 44, BLACK, x + chipW / 2, top + 6, h - 12, chipW - 8);
+          x += chipW + 14;
+        } else x += 10;
+        font('d', nameSize);
+        text(who, x, baseline(top, h) + 1, 'd', nameSize, BLACK);
+        if (more) {
+          const mx = left + stripW + 12;
+          fillRR(mx, top + 7, moreW, h - 14, 6, GOLD);
+          font('c', 26); spacing(0.06, 26);
+          text(more, mx + moreW / 2, baseline(top + 7, h - 14) + 1, 'c', 26, BLACK, 'center');
+          spacing(0, 26);
+        }
+        c.restore();
+      }
+      if (monster) impact(t, bh);
+      c.restore();
+      // A flash on impact (above the bar only).
+      const fp = (t - hit) / 0.16;
+      if (fp >= 0 && fp <= 1) { c.globalAlpha = (monster ? 0.36 : 0.28) * (1 - fp); fillRect(0, 0, W, BAR_Y - 16, '#FFFFFF'); c.globalAlpha = 1; }
+    }
+
+    /** A kill: speed streaks across the band, the way the ball went. */
+    function streaks(t, dir, bh) {
+      const r = rng(7);
+      for (let i = 0; i < 14; i++) {
+        const y = (r() - 0.5) * bh * 0.92, len = 220 + r() * 420, speed = 2600 + r() * 1700, start = r() * 0.25, th = 2 + r() * 4;
+        const q = t - start;
+        if (q < 0 || q > 0.9) continue;
+        const head = -dir * 1150 + dir * speed * q;
+        const tail = head - dir * len;
+        c.fillStyle = hgrad(Math.min(head, tail), Math.max(head, tail), dir > 0 ? ['rgba(250,246,237,0)', 'rgba(250,246,237,0.6)'] : ['rgba(250,246,237,0.6)', 'rgba(250,246,237,0)']);
+        c.fillRect(Math.min(head, tail), y - th / 2, len, th);
+      }
+    }
+
+    /** An ace: a playing card flips over to show the server's number. */
+    function aceCard(t, m, color) {
+      const appear = easeOut((t - 0.1) / 0.16);
+      if (appear <= 0) return;
+      const flip = Math.PI * easeInOut((t - 0.24) / 0.42);
+      const sx = Math.max(0.03, Math.abs(Math.cos(flip)));
+      const front = flip > Math.PI / 2;
+      const cw = 140, ch = 196, ink = numberInk(color);
+      c.save();
+      c.translate(-330, -4); c.rotate(-8 * Math.PI / 180); c.scale(sx * appear, appear);
+      fillRR(-cw / 2 + 8, -ch / 2 + 10, cw, ch, 14, 'rgba(0,0,0,0.35)');
+      if (!front) {
+        fillRR(-cw / 2, -ch / 2, cw, ch, 14, darker(color, 0.7));
+        c.save();
+        rr(-cw / 2 + 9, -ch / 2 + 9, cw - 18, ch - 18, 9); c.clip();
+        c.strokeStyle = 'rgba(236,160,48,0.4)'; c.lineWidth = 2;
+        for (let i = -14; i <= 14; i++) {
+          c.beginPath(); c.moveTo(i * 18 - 200, -200); c.lineTo(i * 18 + 200, 200); c.stroke();
+          c.beginPath(); c.moveTo(i * 18 + 200, -200); c.lineTo(i * 18 - 200, 200); c.stroke();
+        }
+        c.restore();
+        c.lineWidth = 4; c.strokeStyle = GOLD; rr(-cw / 2 + 9, -ch / 2 + 9, cw - 18, ch - 18, 9); c.stroke();
+      } else {
+        fillRR(-cw / 2, -ch / 2, cw, ch, 14, CREAM);
+        c.lineWidth = 2.5; c.strokeStyle = ink; rr(-cw / 2 + 7, -ch / 2 + 7, cw - 14, ch - 14, 9); c.stroke();
+        const corner = () => { text('A', -cw / 2 + 21, -ch / 2 + 38, 'd', 28, ink, 'center'); diamond(-cw / 2 + 21, -ch / 2 + 52, 7, ink); };
+        corner();
+        c.save(); c.rotate(Math.PI); corner(); c.restore();
+        if (m.number) {
+          const ns = fitText(m.number, 78, cw - 60, 'd');
+          font('d', ns); c.textAlign = 'center';
+          text(m.number, 0, midline(m.number), 'd', ns, ink, 'center');
+        } else diamond(0, 0, 34, ink);
+      }
+      c.restore();
+    }
+
+    /** A monster block: a shock line and debris where the band lands. */
+    function impact(t, bh) {
+      const q = t - 0.2;
+      if (q < 0 || q > 0.5) return;
+      const p = q / 0.5, y = bh / 2 + 7;
+      const w = 1900 * easeOut(p);
+      c.globalAlpha = 1 - p;
+      fillRect(-w / 2, y - 2, w, 5, CREAM);
+      const r = rng(11);
+      for (let i = 0; i < 28; i++) {
+        const x0 = (r() - 0.5) * 1400, vx = (r() - 0.5) * 560, vy = 160 + r() * 360, size = 3 + r() * 7;
+        fillRect(x0 + vx * q, y + 6 + vy * q + 700 * q * q, size, size, i % 3 ? CREAM : GOLD);
+      }
+      c.globalAlpha = 1;
+    }
+
+    // ICED: the team called a timeout and the other team's server missed the next serve. Frost creeps in from the
+    // edges, icicles drop from the top, snow blows across, and ICED cracks in.
+    let frostShapes = null;
+    function frost() {
+      if (frostShapes) return frostShapes;
+      const r = rng(1127);
+      const seeds = [];
+      for (let i = 0; i < 16; i++) seeds.push([r() * W, 0, Math.PI / 2]);
+      for (let i = 0; i < 9; i++) seeds.push([0, r() * H, 0]);
+      for (let i = 0; i < 9; i++) seeds.push([W, r() * H, Math.PI]);
+      for (let i = 0; i < 8; i++) seeds.push([r() * W, H, -Math.PI / 2]);
+      const ferns = seeds.map(([x, y, a]) => {
+        const dir = a + (r() - 0.5) * 0.9, len = 70 + r() * 130, delay = r() * 0.45, n = 8, step = len / n;
+        const segs = [];
+        let px = x, py = y;
+        for (let k = 0; k < n; k++) {
+          const nx = px + Math.cos(dir) * step, ny = py + Math.sin(dir) * step;
+          segs.push([px, py, nx, ny, k / n, (k + 1) / n]);
+          if (k > 0 && k < n - 1) {
+            const bl = (len - k * step) * (0.35 + r() * 0.25);
+            [1, -1].forEach(sg => {
+              const ba = dir + sg * Math.PI / 3;
+              segs.push([px, py, px + Math.cos(ba) * bl, py + Math.sin(ba) * bl, k / n, Math.min(1, k / n + 0.35)]);
+            });
+          }
+          px = nx; py = ny;
+        }
+        return { segs, delay };
+      });
+      const icicles = [];
+      for (let x = -10; x < W + 10;) { const w = 16 + r() * 28; icicles.push({ x, w, len: 34 + r() * 82, delay: r() * 0.35, lean: (r() - 0.5) * 6 }); x += w * (0.75 + r() * 0.4); }
+      const flakes = [];
+      for (let i = 0; i < 84; i++) flakes.push({ x: r() * (W + 400) - 400, y: r() * (H + 100) - 100, vx: 160 + r() * 260, vy: 40 + r() * 90, size: 1.5 + r() * 4.5, phase: r() * 6.28 });
+      const gusts = [];
+      for (let i = 0; i < 6; i++) gusts.push({ y: 90 + r() * 480, h: 14 + r() * 22, w: 380 + r() * 380, start: r() * 0.5, speed: 1700 + r() * 900 });
+      frostShapes = { ferns, icicles, flakes, gusts };
+      return frostShapes;
+    }
+
+    function iced(s, st, shown) {
+      const m = shown.moment, t = shown.t, L = shown.length;
+      const life = 1 - easeInOut((t - (L - 0.7)) / 0.7);
+      const grow = easeOut(t / 1.1) * life;
+      const shapes = frost();
+      c.save();
+      // An icy tint and frost at the edges.
+      c.fillStyle = 'rgba(150,205,245,' + (0.16 * grow).toFixed(3) + ')'; c.fillRect(0, 0, W, H);
+      const v = c.createRadialGradient(CENTER_X, H / 2, 240, CENTER_X, H / 2, 820);
+      v.addColorStop(0, 'rgba(215,240,255,0)'); v.addColorStop(1, 'rgba(215,240,255,' + (0.55 * grow).toFixed(3) + ')');
+      c.fillStyle = v; c.fillRect(0, 0, W, H);
+      const edge = (x0, y0, x1, y1, rx, ry, rw, rh) => { c.fillStyle = grad(x0, y0, x1, y1, ['rgba(230,247,255,' + (0.7 * grow).toFixed(3) + ')', 'rgba(200,235,255,' + (0.22 * grow).toFixed(3) + ')', 'rgba(200,235,255,0)']); c.fillRect(rx, ry, rw, rh); };
+      const d = 150 * grow;
+      edge(0, 0, 0, d, 0, 0, W, d);
+      edge(0, H, 0, H - d * 0.7, 0, H - d * 0.7, W, d * 0.7);
+      edge(0, 0, d * 0.9, 0, 0, 0, d * 0.9, H);
+      edge(W, 0, W - d * 0.9, 0, W - d * 0.9, 0, d * 0.9, H);
+      // Frost ferns growing in from the edges.
+      c.beginPath();
+      shapes.ferns.forEach(fern => {
+        const g = easeOut((t - fern.delay) / 1.0) * life;
+        if (g <= 0) return;
+        fern.segs.forEach(([x0, y0, x1, y1, a0, a1]) => {
+          if (g <= a0) return;
+          const f = clamp((g - a0) / (a1 - a0), 0, 1);
+          c.moveTo(x0, y0); c.lineTo(x0 + (x1 - x0) * f, y0 + (y1 - y0) * f);
+        });
+      });
+      c.lineWidth = 1.6; c.lineCap = 'round';
+      c.strokeStyle = 'rgba(245,252,255,' + (0.85 * life).toFixed(3) + ')';
+      c.shadowColor = 'rgba(170,225,255,0.9)'; c.shadowBlur = 6;
+      c.stroke();
+      c.shadowBlur = 0;
+      // A snow ledge along the top, with icicles dropping from it.
+      fillRect(0, 0, W, 12 * grow, 'rgba(245,252,255,' + (0.9 * life).toFixed(3) + ')');
+      shapes.icicles.forEach(ic => {
+        const p = easeOutBack((t - 0.25 - ic.delay) / 0.45) * life;
+        if (p <= 0) return;
+        const len = ic.len * p;
+        c.fillStyle = grad(0, 0, 0, len + 12, ['rgba(255,255,255,0.95)', 'rgba(195,232,255,0.85)', 'rgba(160,215,250,0.2)']);
+        c.beginPath(); c.moveTo(ic.x, 0); c.lineTo(ic.x + ic.w, 0); c.lineTo(ic.x + ic.w / 2 + ic.lean, len + 12); c.closePath(); c.fill();
+        c.strokeStyle = 'rgba(255,255,255,0.8)'; c.lineWidth = 1.5;
+        c.beginPath(); c.moveTo(ic.x + ic.w * 0.32, 3); c.lineTo(ic.x + ic.w / 2 + ic.lean * 0.6 - 2, len * 0.75); c.stroke();
+      });
+      // Wind gusts, then snow blowing across.
+      shapes.gusts.forEach(g => {
+        const q = t - g.start;
+        if (q < 0 || q > 1.4) return;
+        const x = -g.w + g.speed * q;
+        const a = 0.22 * Math.sin(Math.PI * clamp(q / 1.4, 0, 1)) * life;
+        c.fillStyle = hgrad(x, x + g.w, ['rgba(255,255,255,0)', 'rgba(255,255,255,' + a.toFixed(3) + ')', 'rgba(255,255,255,0)']);
+        c.beginPath(); c.ellipse(x + g.w / 2, g.y, g.w / 2, g.h / 2, -0.06, 0, Math.PI * 2); c.fill();
+      });
+      const fa = clamp(t / 0.4, 0, 1) * life;
+      const drift = t <= 1.6 ? t - 0.75 * t * t / 3.2 : 1.6 - 0.375 * 1.6 + 0.25 * (t - 1.6);   // a strong gust first, then gentle
+      c.strokeStyle = 'rgba(255,255,255,' + (0.9 * fa).toFixed(3) + ')'; c.lineWidth = 1.3;
+      c.fillStyle = 'rgba(255,255,255,' + (0.85 * fa).toFixed(3) + ')';
+      shapes.flakes.forEach(fl => {
+        const x = ((fl.x + fl.vx * drift + Math.sin(t * 1.7 + fl.phase) * 14 + 400) % (W + 400) + (W + 400)) % (W + 400) - 200;
+        const y = ((fl.y + fl.vy * t + 100) % (H + 100) + (H + 100)) % (H + 100) - 50;
+        if (fl.size > 3.6) {
+          c.beginPath();
+          for (let k = 0; k < 3; k++) { const a = fl.phase + t * 0.8 + k * Math.PI / 3; c.moveTo(x - Math.cos(a) * fl.size, y - Math.sin(a) * fl.size); c.lineTo(x + Math.cos(a) * fl.size, y + Math.sin(a) * fl.size); }
+          c.stroke();
+        } else { c.beginPath(); c.arc(x, y, fl.size / 2, 0, Math.PI * 2); c.fill(); }
+      });
+      // The team that called the timeout, ICED, and what happened.
+      const color = teamColor(st, m.side);
+      const chipP = easeOut((t - 0.3) / 0.3) * life;
+      if (chipP > 0) {
+        const chip = M.name(s, m.side).toUpperCase() + ' TIMEOUT';
+        font('c', 26); spacing(0.08, 26);
+        const cw = measure(chip) + 40, top = 150;
+        c.globalAlpha = chipP;
+        fillRR(CENTER_X - cw / 2, top, cw, 40, 8, color);
+        text(chip, CENTER_X, baseline(top, 40) + 1, 'c', 26, textOn(color), 'center');
+        spacing(0, 26);
+        c.globalAlpha = 1;
+      }
+      const wp = easeOut((t - 0.4) / 0.35) * life;
+      if (wp > 0) {
+        const k = 1.3 - 0.3 * easeOut((t - 0.4) / 0.35);
+        const shiver = (1 - clamp((t - 0.4) / 0.9, 0, 1)) * 5 * Math.sin(t * 70);
+        c.save();
+        c.translate(CENTER_X + shiver, 300); c.scale(k, k);
+        font('d', 236); c.textAlign = 'center';
+        const by = midline('ICED');
+        c.globalAlpha = wp;
+        c.lineJoin = 'round'; c.lineWidth = 12; c.strokeStyle = ICE_DEEP; c.strokeText('ICED', 0, by);
+        const g = c.createLinearGradient(0, by - 170, 0, by);
+        g.addColorStop(0, '#FFFFFF'); g.addColorStop(0.45, '#DDF4FF'); g.addColorStop(1, '#7CC8F2');
+        text('ICED', 0, by, 'd', 236, g, 'center');
+        const sp = (t - 1.1) / 0.6;   // a shine across the ice
+        if (sp >= 0 && sp <= 1) {
+          const sh = c.createLinearGradient(-300, -160, 300, 60);
+          sh.addColorStop(clamp(sp - 0.1, 0, 1), 'rgba(255,255,255,0)'); sh.addColorStop(sp, 'rgba(255,255,255,0.9)'); sh.addColorStop(clamp(sp + 0.1, 0, 1), 'rgba(255,255,255,0)');
+          ghost('ICED', 0, by, sh, 1);
+        }
+        c.restore();
+      }
+      const subP = easeOut((t - 0.85) / 0.3) * life;
+      if (subP > 0) {
+        const line = 'THE TIMEOUT ICED THE SERVER';
+        font('c', 30); spacing(0.06, 30);
+        const w = measure(line) + 48, top = 418 + (1 - subP) * 20;
+        c.globalAlpha = subP;
+        fillRR(CENTER_X - w / 2, top, w, 48, 8, 'rgba(14,58,92,0.88)');
+        fillRect(CENTER_X - w / 2, top + 44, w, 4, ICE);
+        text(line, CENTER_X, baseline(top, 44) + 1, 'c', 30, CREAM, 'center');
+        spacing(0, 30);
+        c.globalAlpha = 1;
+      }
+      c.restore();
     }
 
     // ---------------------------------------------------------------- lower-third panels (slot C)
@@ -865,6 +1212,9 @@
       sponsorCountHint = f.sponsorCount || 0;
       c.textBaseline = 'alphabetic';
       const countdown = f.panel && f.panel.kind === 'TIMEOUT' ? Math.floor(Math.max(0, f.panel.length - f.panel.t) + 0.99) : null;
+      // Takeovers go under the bar: the score stays readable through them. The corner box (legacy) keeps its own
+      // stat play for every play, so only ICED takes its screen.
+      if (f.takeover && showScoreboard !== false && (layout === 'bar' || f.takeover.kind === 'ICED')) drawTakeover(s, st, f.takeover);
       if (layout === 'bar') {
         if (showScoreboard) {
           drawBar(s, st, f);

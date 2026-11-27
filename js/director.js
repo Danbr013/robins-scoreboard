@@ -14,13 +14,18 @@
   // 30 s after the call (no longest wait) and steps aside for a play or sub that arrives while it is up.
   // The match open (tournament, matchup, season, format) runs up to 45 s, or until the first point.
   const INTRO_MS = 45000;
+  // A statement play (kill, ace, monster block) takes the whole screen for TAKEOVER_S, then the tag on the bar
+  // has the rest; a point play (tip, roll, dump, tool, block) is only the tag, and is dropped after a short wait.
+  const TAKEOVER_S = 2.1, STATEMENT_S = 5.6, POINT_S = 3.6, POINT_WAIT_S = 12;
   const KINDS = {
-    RUN: ['B', 4, 0, 9], TIED: ['B', 3, 0, 9], CORRECTED: ['B', 3, 0, 9],
-    PLAY: ['A', 5, 30, 1], MILESTONE: ['A', 5, 35, 1], SERVER: ['A', 4.5, 9, 5], SUB: ['A', 4.5, 20, 2],
+    RUN: ['B', 4, 0, 9], TIED: ['B', 3, 0, 9], CORRECTED: ['B', 3, 0, 9], RUN_STOPPED: ['B', 4, 0, 9], SAVED: ['B', 4, 0, 9],
+    PLAY: ['A', STATEMENT_S, 30, 1], ICED: ['A', 4.6, 20, 1], MILESTONE: ['A', 5, 35, 1], SERVER: ['A', 4.5, 9, 5], SUB: ['A', 4.5, 20, 2],
     SET_WON: ['C', 7, 30, 0], MATCH_WON: ['C', 20, 60, 0], SET_STATS: ['C', 12, 60, 4], SET_START: ['C', 6, 180, 7],
     TIMEOUT: ['C', 30, 0, 3], INTRO: ['C', 45, 0, 0], POTM: ['C', 15, 60, 4], SPONSOR: ['C', 7, 45, 6],
   };
-  const OVER_TIMEOUT = ['PLAY', 'MILESTONE', 'SUB'];
+  const OVER_TIMEOUT = ['PLAY', 'MILESTONE', 'SUB', 'ICED'];
+  /** Moments drawn across the whole screen (for their first TAKEOVER_S, or all of ICED). */
+  const TAKEOVERS = ['PLAY', 'ICED'];
   /** Plays still go on after a break card up to this long; after a longer break they're old news. */
   const BREAK_KEEPS_PLAYS = 90000;
   const slot = k => KINDS[k][0];
@@ -31,8 +36,11 @@
   const SERVER_DELAY = 2500;
 
   // Points only: a dig wins nothing, so it isn't a play on the video (an old board's DIG is ignored).
-  const STATS = [['kills', 'KILLS', 'KILL', 'KILL'], ['aces', 'ACES', 'ACE', 'ACE'], ['blocks', 'BLOCKS', 'BLOCK', 'BLOCK']];
-  const statForPlay = kind => STATS.find(s => s[3] === kind) || null;
+  // [field, plural, one]; which play counts in which column is RobinsMatch.PLAYS.
+  const STATS = [['kills', 'KILLS', 'KILL'], ['aces', 'ACES', 'ACE'], ['blocks', 'BLOCKS', 'BLOCK']];
+  const statForPlay = kind => { const p = M.playOf(kind); return p ? STATS.find(s => s[0] === p.stat) : null; };
+  /** How long after a point its play can still use what the point did (saved a set point, a run…). */
+  const CONTEXT_MS = 40000;
 
   function isMilestone(field, n) {
     if (field === 'kills') return n >= 5 && n % 5 === 0;
@@ -80,9 +88,12 @@
     let runSide = null, runLength = 0;
     let situationKey = null, situationSince = 0;
     let paused = false, pausedSince = 0, introUp = false, nextSponsor = 0, sponsorCount = 0;
+    let timeoutBy = null;      // the team whose timeout came last, until the next point
+    let lastPoint = null;      // what the latest point did, for its play: { side, set, home, away, at, run, saved, tie, wonSet, wonMatch, iced }
 
     function moment(kind, f) { return Object.assign({ kind, side: null, number: '', name: '', word: '', detail: '', count: 0, out: '', outName: '',
-      setNumber: 0, home: 0, away: 0, sponsor: -1, until: 0, stats: null, seconds: seconds(kind), queuedAt: 0, startedAt: 0, notBefore: 0 }, f || {}); }
+      setNumber: 0, home: 0, away: 0, sponsor: -1, until: 0, stats: null, seconds: seconds(kind), wait: maxWait(kind), statement: false, context: '',
+      queuedAt: 0, startedAt: 0, notBefore: 0 }, f || {}); }
     function enqueue(m, now) { m.queuedAt = now; queue.push(m); }
     function tag(m, now) { m.startedAt = now; tags = tags.filter(t => t.kind !== m.kind); tags.push(m); }
     function enqueueSponsor(now) {
@@ -91,7 +102,8 @@
       nextSponsor = (nextSponsor + 1) % sponsorCount;
     }
 
-    function reset() { last = null; queue = []; active = null; tags = []; pops = {}; runSide = null; runLength = 0; situationKey = null; introUp = false; }
+    function reset() { last = null; queue = []; active = null; tags = []; pops = {}; runSide = null; runLength = 0; situationKey = null; introUp = false;
+      timeoutBy = null; lastPoint = null; }
 
     function pointChanges(prev, s, x, now) {
       const dh = s.home - prev.home, da = s.away - prev.away;
@@ -99,26 +111,69 @@
       if (scorer) {
         pops[scorer] = now;
         tags = tags.filter(t => t.kind !== 'CORRECTED');
+        const ended = runSide && runSide !== scorer ? runLength : 0;
         if (runSide === scorer) runLength++; else { runSide = scorer; runLength = 1; }
         if (active && (active.kind === 'TIMEOUT' || active.kind === 'SET_START')) active = null;   // play has begun
         queue = queue.filter(m => m.kind !== 'TIMEOUT' && m.kind !== 'SET_START' && m.kind !== 'SERVER');   // a new rally: old news
-        if (runLength >= 4 && runLength % 2 === 0) {
+        const point = scored(prev, scorer, s.setNumber, s.home, s.away, now);
+        if (ended) tags = tags.filter(t => t.kind !== 'RUN');
+        // Set point saved, then a run stopped, then a run, then tied: the first one made shows (tags of the same moment).
+        if (point.saved) tag(moment('SAVED', { side: scorer, word: point.saved + ' SAVED' }), now);
+        if (ended >= 5) tag(moment('RUN_STOPPED', { side: scorer, count: ended }), now);
+        if (runLength >= 3) {
           const srv = x.server && x.server.side === scorer && x.server.number ? x.server : null;
           tag(moment('RUN', { side: scorer, number: srv ? srv.number : '', name: srv ? srv.name : '', count: runLength }), now);
         }
         const target = M.targetFor(s.format, s.setNumber);
-        if (s.home === s.away && s.home >= target - 5) tag(moment('TIED', { count: s.home }), now);
+        if (s.home === s.away && s.home >= target - 5) { point.tie = s.home; tag(moment('TIED', { count: s.home }), now); }
       } else if (dh < 0 || da < 0) {
-        runSide = null; runLength = 0;
+        runSide = null; runLength = 0; lastPoint = null; timeoutBy = null;
         tag(moment('CORRECTED'), now);
       } else if (dh !== 0 || da !== 0) {
-        runSide = null; runLength = 0;     // a jump (caught up after a reconnect): no animation
+        runSide = null; runLength = 0; lastPoint = null; timeoutBy = null;     // a jump (caught up after a reconnect): no animation
       }
     }
 
-    function setEnded(s, x, now) {
-      runSide = null; runLength = 0; tags = [];
+    /** Notes what a point by [side] did (from the board before it), for the play the scorer enters next. */
+    function scored(prev, side, set, home, away, now) {
+      const before = M.situation(prev);
+      lastPoint = { side, set, home, away, at: now, run: runSide === side ? runLength : 1,
+        saved: before && before.side !== side ? (before.kind === 'MATCH_POINT' ? 'MATCH POINT' : 'SET POINT') : '',
+        tie: 0, wonSet: 0, wonMatch: false,
+        // Iced: the team that called the last timeout wins the very next point (on a missed serve, says the scorer).
+        iced: timeoutBy === side };
+      timeoutBy = null;
+      return lastPoint;
+    }
+
+    /** The line a statement play adds about its point: SAVES SET POINT, 5–0 RUN, TIES IT 22–22… */
+    function contextFor(side, p, now) {
+      const lp = lastPoint;
+      if (!lp || lp.side !== side || now - lp.at > CONTEXT_MS || !samePoint(lp, p)) return '';
+      if (lp.wonMatch) return 'WINS THE MATCH';
+      if (lp.wonSet) return 'WINS SET ' + lp.wonSet;
+      if (lp.saved) return 'SAVES ' + lp.saved;
+      if (lp.tie) return 'TIES IT ' + lp.tie + '\u2013' + lp.tie;
+      if (lp.run >= 3) return lp.run + '\u20130 RUN';
+      return '';
+    }
+    /** A play from the scorer page names its rally (set and score after the point); older ones don't. */
+    const samePoint = (lp, p) => !p || !(p.set > 0) || (p.set === lp.set && p.home === lp.home && p.away === lp.away);
+
+    function setEnded(prev, s, x, now) {
       const lastSet = s.completedSets[s.completedSets.length - 1];
+      if (lastSet) {
+        const winner = lastSet.home > lastSet.away ? 'home' : 'away';
+        const n = s.completedSets.length;
+        const pv = prev.completedSets.length === n - 1 ? prev : null;   // the set's last point, not a jump
+        if (pv && runSide !== winner) { runSide = winner; runLength = 0; }
+        if (pv) runLength++;
+        const point = scored(pv || s, winner, n, lastSet.home, lastSet.away, now);
+        if (!pv) { point.saved = ''; point.iced = false; }
+        point.wonSet = n;
+        point.wonMatch = !!s.matchOver;
+      }
+      runSide = null; runLength = 0; tags = []; timeoutBy = null;
       if (s.matchOver) {
         queue = queue.filter(m => m.kind !== 'SET_START');
         if (active && active.kind === 'SET_START') active = null;
@@ -162,7 +217,7 @@
         return;
       }
       milestones(prevExtras, lastExtras, now);
-      if (s.completedSets.length > prev.completedSets.length || (s.matchOver && !prev.matchOver)) setEnded(s, lastExtras, now);
+      if (s.completedSets.length > prev.completedSets.length || (s.matchOver && !prev.matchOver)) setEnded(prev, s, lastExtras, now);
       else if (s.setNumber === prev.setNumber) pointChanges(prev, s, lastExtras, now);
       if (s.serving && s.serving !== prev.serving && !s.matchOver && s.home + s.away > 0) {
         const srv = lastExtras.server;
@@ -173,17 +228,29 @@
         }
       }
       ['home', 'away'].forEach(side => {
-        if (s.setNumber === prev.setNumber && s[side + 'Timeouts'] > prev[side + 'Timeouts']) enqueue(moment('TIMEOUT', { side, until: now + 30000 }), now);
+        if (s.setNumber === prev.setNumber && s[side + 'Timeouts'] > prev[side + 'Timeouts']) {
+          enqueue(moment('TIMEOUT', { side, until: now + 30000 }), now);
+          timeoutBy = side;
+        }
       });
     }
 
     function event(p, now) {
       const kind = String(p.kind || '').toUpperCase();
       const side = p.side === 'away' ? 'away' : 'home';
-      const stat = statForPlay(kind);
-      if (stat) {
+      const play = M.playOf(kind);
+      if (play) {
         const pl = player(lastExtras, side, p.number || '');
-        enqueue(moment('PLAY', { side, number: p.number || '', name: p.name || '', word: kind, count: pl ? pl[stat[0]] : 0 }), now);
+        const statement = play.tier === 'statement';
+        enqueue(moment('PLAY', { side, number: p.number || '', name: p.name || '', word: kind, count: pl ? pl[play.stat] : 0, statement,
+          context: statement ? contextFor(side, p, now) : '', seconds: statement ? STATEMENT_S : POINT_S, wait: statement ? 30 : POINT_WAIT_S }), now);
+      } else if (kind === 'SERVE_ERROR') {
+        // The other team missed its serve. After this team's own timeout, that's the timeout icing the server.
+        const lp = lastPoint;
+        if (lp && lp.iced && lp.side === side && now - lp.at <= CONTEXT_MS && samePoint(lp, p)) {
+          lp.iced = false;
+          enqueue(moment('ICED', { side, home: lp.home, away: lp.away, setNumber: lp.set }), now);
+        }
       } else if (kind === 'SUB') {
         enqueue(moment('SUB', { side, number: p.number || '', name: p.name || '', out: p.out || '', outName: p.outName || '', word: 'SUB' }), now);
       } else if (kind === 'POTM') {
@@ -226,7 +293,7 @@
         active = null;
       }
       if (!active && !paused) {
-        queue = queue.filter(m => !(maxWait(m.kind) > 0 && now - m.queuedAt > maxWait(m.kind) * 1000));
+        queue = queue.filter(m => !(m.wait > 0 && now - m.queuedAt > m.wait * 1000));
         let next = null;
         queue.forEach(m => { if (now < m.notBefore) return; if (!next || priority(m.kind) < priority(next.kind) || (priority(m.kind) === priority(next.kind) && m.queuedAt < next.queuedAt)) next = m; });
         if (next) {
@@ -237,21 +304,30 @@
       }
       tags = tags.filter(t => now - t.startedAt <= t.seconds * 1000);
       const a = active;
-      const shown = a ? { moment: a, kind: a.kind, t: (now - a.startedAt) / 1000,
+      let shown = a ? { moment: a, kind: a.kind, t: (now - a.startedAt) / 1000,
         length: a.kind === 'TIMEOUT' ? (a.until - a.startedAt) / 1000 : a.kind === 'INTRO' ? INTRO_MS / 1000 : a.seconds } : null;
+      // A statement play is the takeover first, then the tag on the bar (which gets the rest of its time).
+      let takeover = null;
+      if (shown && shown.kind === 'ICED') { takeover = shown; shown = null; }
+      else if (shown && shown.kind === 'PLAY' && a.statement) {
+        if (shown.t < TAKEOVER_S) { takeover = shown; shown = null; }
+        else shown = Object.assign({}, shown, { t: shown.t - TAKEOVER_S, length: shown.length - TAKEOVER_S });
+      }
       const s = last;
       const sit = s ? M.situation(s) : null;
       const key = sit ? s.setNumber + '-' + sit.side + '-' + sit.kind : null;
       if (key !== situationKey) { situationKey = key; situationSince = now; }
-      const busy = !!shown;
+      const busy = !!shown || !!takeover;
       let t = null;
-      if (!busy) tags.filter(m => !sit || m.kind !== 'RUN').forEach(m => { if (!t || m.startedAt > t.startedAt) t = m; });
+      // A set point tag sits where a run's would: the run waits.
+      if (!busy) tags.filter(m => !sit || (m.kind !== 'RUN' && m.kind !== 'RUN_STOPPED')).forEach(m => { if (!t || m.startedAt > t.startedAt) t = m; });
       const popNow = {};
       Object.keys(pops).forEach(side => { const d = (now - pops[side]) / 1000; if (d < 0.7) popNow[side] = d; });
       return {
         pops: popNow,
         pointTag: busy || !sit ? null : { situation: sit, t: (now - situationSince) / 1000 },
         tag: t ? { moment: t, kind: t.kind, t: (now - t.startedAt) / 1000, length: t.seconds } : null,
+        takeover,
         extension: shown && slot(shown.kind) === 'A' ? shown : null,
         panel: shown && slot(shown.kind) === 'C' ? shown : null,
         sponsorCount,
@@ -272,7 +348,7 @@
     };
   }
 
-  const api = { Director, KINDS, extrasFrom, isMilestone, statLine, ordinal, statForPlay };
+  const api = { Director, KINDS, TAKEOVER_S, STATEMENT_S, POINT_S, extrasFrom, isMilestone, statLine, ordinal, statForPlay };
   root.RobinsDirector = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

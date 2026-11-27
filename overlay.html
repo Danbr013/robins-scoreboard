@@ -366,7 +366,8 @@
 
   // ---------------------------------------------------------------- stat plays
 
-  const PLAY_WORDS = { KILL: 'KILL!', ACE: 'ACE!', BLOCK: 'BLOCK!' };
+  // The corner box (legacy) keeps its own stat play beside the scorebug for every play; the bottom bar draws them.
+  const boxPlay = kind => M.playOf(kind);
 
   function playStat(p) {
     if (!geometry || !board) return;
@@ -382,7 +383,8 @@
       boxShadow: outline(st, p.side) }, layer.fx);
     el('slash', {}, box);
     const word = el('word d', { top: px(h / 2 - 44 * k), height: px(90 * k), lineHeight: px(96 * k), fontSize: px(92 * k), color: ink }, box);
-    word.textContent = PLAY_WORDS[p.kind] || (p.kind || '').toUpperCase();
+    const play = M.playOf(p.kind);
+    word.textContent = play ? play.word || play.label + '!' : (p.kind || '').toUpperCase();
 
     const who = el('who', {}, box);
     const pad = 14 * k;
@@ -403,7 +405,7 @@
     fit(nm, 48 * k, room);
     const sub = el('abs c', { left: px(tx), top: px(h / 2 + 14 * k), width: px(room), height: px(26 * k), lineHeight: px(28 * k), color: ink,
       opacity: .9, whiteSpace: 'nowrap', overflow: 'hidden', letterSpacing: '.06em' }, who);
-    sub.textContent = ((PLAY_WORDS[p.kind] || p.kind || '').replace('!', '') + '  ·  ' + (s.matchOver ? 'FINAL' : 'SET ' + s.setNumber)).toUpperCase();
+    sub.textContent = ((play ? play.label : p.kind || '') + '  ·  ' + (s.matchOver ? 'FINAL' : 'SET ' + s.setNumber)).toUpperCase();
     fit(sub, 22 * k, room);
     clearTimeout(playStat.timer);
     playStat.timer = setTimeout(function () { layer.fx.textContent = ''; }, 4500);
@@ -523,7 +525,7 @@
       const age = (res.now || Date.now()) - p.at;
       if (age < 20000) director.event(p, now);
       // The corner box keeps its own stat play beside the scorebug.
-      if (layoutOf(styleOf(next)) === 'box' && age < 9000 && ['KILL', 'ACE', 'BLOCK'].indexOf(String(p.kind).toUpperCase()) >= 0 &&
+      if (layoutOf(styleOf(next)) === 'box' && age < 9000 && boxPlay(p.kind) &&
           !(next.card && next.card.type) && styleOf(next).show !== false) playStat(p);
     }
     if (changed) {
@@ -605,6 +607,7 @@
 
   window.RobinsOverlay = { texts: () => (lastFrame ? renderer.texts() : []), frame: () => lastFrame && {
     panel: lastFrame.panel && lastFrame.panel.kind, extension: lastFrame.extension && lastFrame.extension.kind,
+    takeover: lastFrame.takeover && (lastFrame.takeover.kind === 'PLAY' ? lastFrame.takeover.moment.word : lastFrame.takeover.kind),
     tag: lastFrame.tag && lastFrame.tag.kind, pointTag: lastFrame.pointTag && lastFrame.pointTag.situation.kind } };
   window.addEventListener('resize', fitStage);
   fitStage();
@@ -624,12 +627,32 @@
         if (what === 'point') step(M.point(s, 'home').state);
         if (what === 'run') for (let i = 0; i < 4; i++) { s = M.point(s, 'home').state; step(s); }
         if (what === 'timeout') step(M.timeout(s, 'away').state);
+        if (what === 'reel') {   // every play tier and ICED in about 29 s, for previews over real footage
+          const play = (at, kind, side, num, name) => setTimeout(function () {
+            director.event({ kind, side, number: num, name, set: s.setNumber, home: s.home, away: s.away, at: Date.now() }, Date.now()); kick(); }, at);
+          const pt = (at, side) => setTimeout(function () { step(s = M.point(s, side).state); }, at);
+          board.match.stats.home.players = { 10: { name: 'Tolliver', kills: 4 }, 43: { name: 'Del Sordo', kills: 3 }, 18: { name: 'Okafor', aces: 2 } };
+          board.match.stats.away.players = { 4: { name: 'Ramirez', blocks: 2 } };
+          pt(300, 'home'); play(700, 'KILL', 'home', '10', 'Tolliver');
+          pt(6500, 'home'); play(6900, 'ROLL', 'home', '43', 'Del Sordo');
+          pt(10700, 'home'); play(11100, 'ACE', 'home', '18', 'Okafor');
+          pt(16900, 'away'); play(17300, 'MONSTER', 'away', '4', 'Ramirez');
+          setTimeout(function () { step(s = M.timeout(s, 'home').state); }, 22900);
+          pt(24200, 'home'); play(24600, 'SERVE_ERROR', 'home', '', '');
+        }
+        if (what === 'iced') {   // the home team calls a timeout, the away server misses the next serve
+          s = M.setServing(s, 'away').state; step(s);
+          s = M.timeout(s, 'home').state; step(s);
+          setTimeout(function () { step(s = M.point(s, 'home').state);
+            director.event({ kind: 'SERVE_ERROR', side: 'home', set: s.setNumber, home: s.home, away: s.away, at: Date.now() }, Date.now()); kick(); },
+            Number(params.get('toFor') || 1500));
+        }
         if (what === 'setwon') { while (s.setNumber === board.match.setNumber && !s.matchOver) s = M.point(s, 'home').state; step(s); }
         const kind = (params.get('play') || '').toUpperCase();
         if (kind) {
           const p = { kind, side: params.get('side') || 'home', number: params.get('num') || '10', name: params.get('name') || 'Tolliver',
             out: '3', outName: 'Lee', text: kind === 'POTM' ? '12 KILLS  ·  3 ACES' : '', at: Date.now() };
-          if (layoutOf(styleOf(board)) === 'box' && PLAY_WORDS[kind]) playStat(p);
+          if (layoutOf(styleOf(board)) === 'box' && boxPlay(kind)) playStat(p);
           director.event(p, Date.now()); kick();
         }
       }, 300);

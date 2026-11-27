@@ -81,13 +81,17 @@
   #how { position: fixed; left: 10px; right: 10px; top: calc(env(safe-area-inset-top) + 44px); background: #101014; border: 1px solid #33333c;
     border-radius: 16px; padding: 10px; z-index: 15; box-shadow: 0 12px 32px rgba(0,0,0,.65); }
   #how .q { font-size: 16px; opacity: .85; margin: 0 4px 8px; }
-  #how .opts { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+  #how .tier { display: flex; gap: 6px; margin-top: 6px; }
+  #how .tier button { flex: 1 1 0; min-width: 0; }
+  #how .tier.t2 button { padding: 11px 2px; font-size: 15px; }
+  #how .tier.t3 button { padding: 10px 2px; font-size: 15px; background: #26262e; color: #d8d4cc; }
+  #how .tier.t3 button.x { flex: 0 0 54px; }
   .slots { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin: 6px 0 4px; }
   .slot { border: 1px solid var(--line); background: var(--panel); border-radius: 10px; padding: 6px 2px; text-align: center; min-height: 62px; }
   .slot small { display: block; font-size: 11px; opacity: .6; letter-spacing: .08em; }
   .slot b { display: block; font-family: 'Bebas Neue', sans-serif; font-size: 30px; font-weight: 400; line-height: 1.05; }
   .slot.serving { border-color: var(--gold); box-shadow: inset 0 0 0 1px var(--gold); }
-  #how button { border: 0; border-radius: 12px; padding: 14px 2px; font-size: 18px; font-weight: 700; background: var(--panel2); }
+  #how button { border: 0; border-radius: 12px; padding: 16px 2px; font-size: 18px; font-weight: 700; background: var(--panel2); }
   #how button.k { background: var(--gold); color: var(--black); }
   #tobar { position: fixed; left: 10px; right: 10px; top: calc(env(safe-area-inset-top) + 44px); background: #101014; border: 1px solid #33333c;
     border-radius: 16px; padding: 10px; z-index: 16; box-shadow: 0 12px 32px rgba(0,0,0,.65); }
@@ -162,12 +166,23 @@
 <!-- After a point: how was it won? -->
 <div id="how" class="hidden">
   <div class="q" id="howQ">How did they score?</div>
-  <div class="opts">
+  <!-- Statement plays take the whole screen; point plays get a tag on the bar; errors only change the score. -->
+  <div class="tier t1">
     <button class="k" data-act="how" data-kind="KILL">Kill</button>
     <button class="k" data-act="how" data-kind="ACE" id="howAce">Ace</button>
-    <button class="k" data-act="how" data-kind="BLOCK">Block</button>
-    <button data-act="how" data-kind="OPP_ERROR">Error</button>
-    <button data-act="howclose">✕</button>
+    <button class="k" data-act="how" data-kind="MONSTER">Monster block</button>
+  </div>
+  <div class="tier t2">
+    <button data-act="how" data-kind="TIP">Tip</button>
+    <button data-act="how" data-kind="ROLL">Roll</button>
+    <button data-act="how" data-kind="DUMP">Dump</button>
+    <button data-act="how" data-kind="TOOL">Tool</button>
+    <button data-act="how" data-kind="BLOCK">Block</button>
+  </div>
+  <div class="tier t3">
+    <button data-act="how" data-kind="SERVE_ERROR" id="howMiss">Missed serve</button>
+    <button data-act="how" data-kind="OPP_ERROR">Their error</button>
+    <button class="x" data-act="howclose">✕</button>
   </div>
 </div>
 
@@ -402,8 +417,11 @@
   let cardDraft = { type: 'break', seconds: 0 };
   let playQueue = [];          // Kill / Ace / Block waiting their turn on the video
   let playOnAirAt = 0;         // when the service took the last play we sent
+  let playOnAirGap = 0;        // and how long that play gets on the video
   let pumpTimer = null;
-  const PLAY_GAP = 5600;       // time each play gets on the video (the animation runs 4.4 s; overlays check every second)
+  const PLAY_GAP = 5600;       // time each play gets on the video (a statement play runs 5.6 s; overlays check every second)
+  /** A point play is a 3.6 s tag; a missed serve only matters when it ices the server (the overlay decides). */
+  const gapFor = kind => { const p = M.playOf(kind); return kind === 'SERVE_ERROR' ? 2000 : p && p.tier === 'point' ? 3800 : PLAY_GAP; };
   const PLAY_MAX_WAIT = 120000; // plays waiting longer than this are dropped as stale (a 30 s timeout screen holds them)
   let toTimer = null, toCardTimer = null;
   const plateCache = {};       // logo id → plate color
@@ -649,7 +667,7 @@
         if (bannerToSend === banner) bannerToSend = undefined;
         if (cardToSend === card) cardToSend = undefined;
         if (playToSend === play) playToSend = undefined;
-        if (play) { playOnAirAt = Date.now(); setTimeout(pumpPlays, 0); }
+        if (play) { playOnAirAt = Date.now(); playOnAirGap = gapFor(play.kind); setTimeout(pumpPlays, 0); }
         render();
         if (changes === sentChanges) dirty = false;
         setSync(dirty ? 'SAVING' : 'SAVED', dirty ? 'busy' : 'ok');
@@ -686,10 +704,10 @@
   function matchStats() {
     const out = {};
     ['home', 'away'].forEach(side => { out[side] = { kills: 0, aces: 0, blocks: 0, players: {} }; });
-    const field = { KILL: 'kills', ACE: 'aces', BLOCK: 'blocks' };
     let any = false;
     events.forEach(e => {
-      const f = field[e.kind];
+      const play = M.playOf(e.kind);
+      const f = play && play.stat;     // tips, rolls, dumps and tools are kills; a monster block is a block
       if (!f || e.undone || !out[e.side]) return;
       any = true;
       const t = out[e.side];
@@ -1111,7 +1129,8 @@
   });
 
   // ---------------------------------------------------------------- how the point was won
-  const KIND_LABEL = { KILL: 'Kill', ACE: 'Ace', BLOCK: 'Block', OPP_ERROR: 'Opponent error' };
+  const KIND_LABEL = { KILL: 'Kill', ACE: 'Ace', MONSTER: 'Monster block', TIP: 'Tip', ROLL: 'Roll shot', DUMP: 'Setter dump', TOOL: 'Tool',
+    BLOCK: 'Block', SERVE_ERROR: 'Missed serve', OPP_ERROR: 'Opponent error' };
 
   function askHow(side, eventIndex, canAce) {
     const ev = events[eventIndex] || {};
@@ -1121,8 +1140,9 @@
     how = { side, eventIndex, canAce, rally,
       mark: { side, total: totalPoints(match, side), homeName: match.homeName, awayName: match.awayName } };
     $('howQ').textContent = 'How did ' + M.name(match, side).toUpperCase() + ' score?';
+    // An ace only when they served; a missed serve (by the other team) only when they were receiving.
     $('howAce').classList.toggle('hidden', !canAce);
-    document.querySelector('#how .opts').style.gridTemplateColumns = 'repeat(' + (canAce ? 6 : 5) + ', 1fr)';
+    $('howMiss').classList.toggle('hidden', !!canAce);
     $('how').classList.remove('hidden');
     clearTimeout(howTimer);
     howTimer = setTimeout(closeHow, 9000);
@@ -1134,6 +1154,8 @@
     if (!how) return;
     how.kind = kind;
     if (kind === 'OPP_ERROR') { tagEvent('', ''); toast('Logged as an opponent error'); return; }
+    // No player to pick: the overlay only shows it when it follows this team's timeout (ICED).
+    if (kind === 'SERVE_ERROR') { sendPlay('', '', 'Logged as a missed serve'); return; }
     openPlayers();
   }
 
@@ -1208,13 +1230,14 @@
     show('players');
   }
 
-  function sendPlay(number, name) {
+  function sendPlay(number, name, quiet) {
     tagEvent(number, name);
-    const waiting = playQueue.length + (playToSend ? 1 : 0) + (Date.now() - playOnAirAt < PLAY_GAP ? 1 : 0);
+    const waiting = playQueue.length + (playToSend ? 1 : 0) + (Date.now() - playOnAirAt < playOnAirGap ? 1 : 0);
     playQueue.push({ kind: how.kind, side: how.side, number: number || '', name: name ? short(name) : '',
       id: Math.random().toString(36).slice(2, 10), mark: how.mark, rally: how.rally, queuedAt: Date.now() });
     show(null);
     pumpPlays();
+    if (quiet) { toast(quiet); return; }
     const what = KIND_LABEL[how.kind] + (number ? ' · #' + number : '') + (name ? ' ' + short(name) : '');
     toast(waiting ? what + ' is next in line (' + waiting + ' ahead)' : what + ' on screen');
   }
@@ -1228,7 +1251,7 @@
     const now = Date.now();
     playQueue = playQueue.filter(p => stillStands(p.mark) && now - p.queuedAt < PLAY_MAX_WAIT);
     if (playQueue.length && playToSend === undefined) {
-      const wait = Math.max(playOnAirAt + PLAY_GAP - now, currentCard() ? 1000 : 0);   // break screens hide plays: wait them out
+      const wait = Math.max(playOnAirAt + playOnAirGap - now, currentCard() ? 1000 : 0);   // break screens hide plays: wait them out
       if (wait > 0) pumpTimer = setTimeout(pumpPlays, wait);
       else {
         const p = playQueue.shift();
@@ -1267,7 +1290,7 @@
 
   /** Puts any play (sub, player of the match, sponsor, dig) in line for the video, like Kill / Ace / Block. */
   function queuePlay(kind, side, number, name, extra, label) {
-    const waiting = playQueue.length + (playToSend ? 1 : 0) + (Date.now() - playOnAirAt < PLAY_GAP ? 1 : 0);
+    const waiting = playQueue.length + (playToSend ? 1 : 0) + (Date.now() - playOnAirAt < playOnAirGap ? 1 : 0);
     playQueue.push({ kind, side, number: number || '', name: name || '', extra: extra || null,
       id: Math.random().toString(36).slice(2, 10), mark: null, rally: null, queuedAt: Date.now() });
     show(null);

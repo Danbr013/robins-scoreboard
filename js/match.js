@@ -283,7 +283,26 @@
       typeof s.homeName === 'string' && typeof s.awayName === 'string';
   }
 
+  /**
+   * How a point was won (docs/GRAPHICS.md, "Plays"). A statement play takes the whole screen for a moment;
+   * a point play gets a tag on the bar. Every one counts in the usual stat column: any attack that ends the
+   * rally is a kill (tips, rolls, dumps and tools included), any block that wins the point is a block.
+   * SERVE_ERROR (the other team missed its serve) and OPP_ERROR count for nobody.
+   */
+  const PLAYS = {
+    KILL: { tier: 'statement', stat: 'kills', word: 'KILL!', label: 'KILL' },
+    ACE: { tier: 'statement', stat: 'aces', word: 'ACE!', label: 'ACE' },
+    MONSTER: { tier: 'statement', stat: 'blocks', word: 'MONSTER BLOCK!', label: 'MONSTER BLOCK' },
+    TIP: { tier: 'point', stat: 'kills', label: 'TIP' },
+    ROLL: { tier: 'point', stat: 'kills', label: 'ROLL SHOT' },
+    DUMP: { tier: 'point', stat: 'kills', label: 'SETTER DUMP' },
+    TOOL: { tier: 'point', stat: 'kills', label: 'TOOL' },
+    BLOCK: { tier: 'point', stat: 'blocks', label: 'BLOCK' },
+  };
+  const playOf = kind => PLAYS[String(kind || '').toUpperCase()] || null;
+
   const api = {
+    PLAYS, playOf,
     PRESETS, CAP_CHOICES, TIMEOUT_CHOICES, isValid, DEFAULT_FORMAT, normFormat, presetFor, capFor, timeoutLimit, timeoutsLeft,
     other, setsToWin, targetFor, isSetWon, formatLabel, formatWords, sameFormat,
     newMatch, point, removePoint, setServing, timeout, rename,
