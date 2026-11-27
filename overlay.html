@@ -366,7 +366,7 @@
 
   // ---------------------------------------------------------------- stat plays
 
-  const PLAY_WORDS = { KILL: 'KILL!', ACE: 'ACE!', BLOCK: 'BLOCK!', DIG: 'DIG!' };
+  const PLAY_WORDS = { KILL: 'KILL!', ACE: 'ACE!', BLOCK: 'BLOCK!' };
 
   function playStat(p) {
     if (!geometry || !board) return;
@@ -523,7 +523,7 @@
       const age = (res.now || Date.now()) - p.at;
       if (age < 20000) director.event(p, now);
       // The corner box keeps its own stat play beside the scorebug.
-      if (layoutOf(styleOf(next)) === 'box' && age < 9000 && ['KILL', 'ACE', 'BLOCK', 'DIG'].indexOf(String(p.kind).toUpperCase()) >= 0 &&
+      if (layoutOf(styleOf(next)) === 'box' && age < 9000 && ['KILL', 'ACE', 'BLOCK'].indexOf(String(p.kind).toUpperCase()) >= 0 &&
           !(next.card && next.card.type) && styleOf(next).show !== false) playStat(p);
     }
     if (changed) {

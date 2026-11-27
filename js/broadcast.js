@@ -18,9 +18,11 @@
   const BAR_X = (W - BAR_W) / 2;
   const EXT_W = 280, PANEL_W = 560, PANEL_H = 170, BOX_BOTTOM = 690;
   const BLACK = '#08080A', RED = '#BE121C', GOLD = '#ECA030', CREAM = '#FAF6ED', PANEL = '#1C1C22';
-  const PLAY_WORDS = { KILL: 'KILL!', ACE: 'ACE!', BLOCK: 'BLOCK!', DIG: 'DIG!' };
-  const STAT_ROWS = [['kills', 'KILLS'], ['aces', 'ACES'], ['blocks', 'BLOCKS'], ['digs', 'DIGS']];
-  const ONE = { KILL: 'KILL', ACE: 'ACE', BLOCK: 'BLOCK', DIG: 'DIG' };
+  const PLAY_WORDS = { KILL: 'KILL!', ACE: 'ACE!', BLOCK: 'BLOCK!' };
+  const STAT_ROWS = [['kills', 'KILLS'], ['aces', 'ACES'], ['blocks', 'BLOCKS']];
+  const ONE = { KILL: 'KILL', ACE: 'ACE', BLOCK: 'BLOCK' };
+  // Team logos sit on a dark plate (their own colours show true; a light plate washed some of them out).
+  const PLATE = '#131317', PLATE_EDGE = 'rgba(250,246,237,.18)';
   const FACES = { d: '"Bebas Neue", "Oswald", "Arial Narrow", sans-serif', c: '600 X "Barlow Condensed", "Arial Narrow", sans-serif' };
 
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -114,6 +116,11 @@
     const teamLogo = (st, side) => logo(side === 'home' ? st.homeLogo : st.awayLogo);
     const numberInk = color => { const l = lum(color); return l > 0.55 || l < 0.02 ? BLACK : color; };
     function darkPanel(x, y, w, h) { c.globalAlpha = 240 / 255; fillRR(x, y, w, h, 12, BLACK); c.globalAlpha = 1; }
+    /** The dark plate a team logo sits on, with a faint edge so its shape reads on any background. */
+    function logoPlate(x, y, w, h, r) {
+      fillRR(x, y, w, h, r, PLATE);
+      c.lineWidth = 1.5; c.strokeStyle = PLATE_EDGE; rr(x + 0.75, y + 0.75, w - 1.5, h - 1.5, r); c.stroke();
+    }
 
     // ---------------------------------------------------------------- the bar
     const extOpen = (t, len) => Math.min(easeOut(t / 0.35), easeOut((len - t) / 0.3));
@@ -150,13 +157,13 @@
       const nameL = home ? logoL + LOGO_W : logoL - NAME_W;
       const setsL = home ? nameL + NAME_W : nameL - SETS_W;
       const ptsL = home ? setsL + SETS_W : setsL - PTS_W;
-      // Logo plate (cream), rounded on the outside.
+      // Logo plate (dark), rounded on the outside.
       c.save(); clip(logoL, y, LOGO_W, h);
-      fillRR(home ? logoL : logoL - 8, y, LOGO_W + 8, h, 6, CREAM);
+      fillRR(home ? logoL : logoL - 8, y, LOGO_W + 8, h, 6, PLATE);
       c.restore();
       const img = teamLogo(st, side);
       if (img) fit(img, logoL + 5, y + 4, LOGO_W - 10, h - 8);
-      else centered(M.name(s, side).slice(0, 1).toUpperCase(), 'd', 38, color, logoL + LOGO_W / 2, y, h, LOGO_W - 8);
+      else centered(M.name(s, side).slice(0, 1).toUpperCase(), 'd', 38, lum(color) < 0.08 ? CREAM : color, logoL + LOGO_W / 2, y, h, LOGO_W - 8);
       // Name in the team color, a touch darker toward the centre.
       c.fillStyle = hgrad(nameL, nameL + NAME_W, home ? [color, darker(color, 0.72)] : [darker(color, 0.72), color]);
       c.fillRect(nameL, y, NAME_W, h);
@@ -392,7 +399,7 @@
     }
 
     // ---------------------------------------------------------------- lower-third panels (slot C)
-    const PANEL_SIZES = { SET_WON: [960, 132], MATCH_WON: [960, 252], SET_STATS: [880, 300], SET_START: [660, 80],
+    const PANEL_SIZES = { SET_WON: [960, 132], MATCH_WON: [960, 252], SET_STATS: [880, 262], SET_START: [660, 80],
       TIMEOUT: [700, 0], INTRO: [1060, 330], POTM: [840, 240], SPONSOR: [660, 200] };
 
     function drawPanel(s, st, shown, layout, countdown) {
@@ -419,7 +426,7 @@
     function plateLogo(st, side, s, color, px, py, pw, ph, inset, letterSize) {
       const img = teamLogo(st, side);
       if (img) fit(img, px + inset, py + inset, pw - inset * 2, ph - inset * 2);
-      else centered(M.name(s, side).slice(0, 1), 'd', letterSize, color, px + pw / 2, py, ph, pw);
+      else centered(M.name(s, side).slice(0, 1), 'd', letterSize, lum(color) < 0.08 ? CREAM : color, px + pw / 2, py, ph, pw);
     }
 
     function setWon(s, st, x, y, w, h, m) {
@@ -428,7 +435,7 @@
       rr(x, y, w, h, 12); c.fill();
       fillRect(x, y + h - 6, w, 6, GOLD);
       const pl = { x: x + 18, y: y + 14, w: 102, h: h - 34 };
-      fillRR(pl.x, pl.y, pl.w, pl.h, 10, CREAM);
+      logoPlate(pl.x, pl.y, pl.w, pl.h, 10);
       plateLogo(st, side, s, color, pl.x, pl.y, pl.w, pl.h, 6, 70);
       const score = side === 'home' ? m.home + '–' + m.away : m.away + '–' + m.home;
       font('d', 84);
@@ -534,7 +541,7 @@
       const mh = 144;
       fillRect(x, y, 10, mh, color);
       const pl = { x: x + 26, y: y + 18, w: 94, h: mh - 36 };
-      fillRR(pl.x, pl.y, pl.w, pl.h, 10, CREAM);
+      logoPlate(pl.x, pl.y, pl.w, pl.h, 10);
       const img = teamLogo(st, side);
       if (img) fit(img, pl.x + 6, pl.y + 6, pl.w - 12, pl.h - 12);
       text('TIMEOUT', pl.x + pl.w + 22, y + 66, 'd', 60, CREAM);
@@ -731,8 +738,8 @@
         const color = teamColor(st, side);
         c.globalAlpha = clamp((t - 0.05) / 0.4, 0, 1);
         const px = cx - 70, py = y + 60, pw = 140, ph = 140;
-        fillRR(px, py, pw, ph, 14, CREAM);
-        fillRect(px, py + ph - 8, pw, 8, color);
+        logoPlate(px, py, pw, ph, 14);
+        fillRect(px + 1, py + ph - 8, pw - 2, 8, color);
         const img = teamLogo(st, side);
         if (img) fit(img, px + 10, py + 10, pw - 20, ph - 26);
         else centered(M.name(s, side).slice(0, 1), 'd', 90, color, cx, py, ph - 8, pw);
@@ -768,8 +775,8 @@
           c.globalAlpha = clamp((t - 0.2 - i * 0.15) / 0.4, 0, 1);
           const cx0 = x + 24 + i * (w / 2);
           const color = teamColor(st, side);
-          fillRR(cx0, top + 18, 64, 64, 10, CREAM);
-          fillRect(cx0, top + 78, 64, 4, color);
+          logoPlate(cx0, top + 18, 64, 64, 10);
+          fillRect(cx0 + 1, top + 78, 62, 4, color);
           const img = teamLogo(st, side);
           if (img) fit(img, cx0 + 6, top + 22, 52, 52);
           else centered(M.name(s, side).slice(0, 1), 'd', 44, color, cx0 + 32, top + 18, 60, 60);

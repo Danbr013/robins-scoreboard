@@ -166,7 +166,6 @@
     <button class="k" data-act="how" data-kind="KILL">Kill</button>
     <button class="k" data-act="how" data-kind="ACE" id="howAce">Ace</button>
     <button class="k" data-act="how" data-kind="BLOCK">Block</button>
-    <button class="k" data-act="how" data-kind="DIG">Dig</button>
     <button data-act="how" data-kind="OPP_ERROR">Error</button>
     <button data-act="howclose">✕</button>
   </div>
@@ -225,10 +224,12 @@
   <h3>Scoreboard look</h3>
   <div class="note">Layout</div>
   <div class="chips" id="layoutChips" style="margin:6px 0 12px"></div>
-  <div class="note">Corner (corner box only)</div>
-  <div class="chips" id="cornerChips" style="margin:6px 0 12px"></div>
-  <div class="note">Size</div>
-  <div class="chips" id="sizeChips" style="margin:6px 0 12px"></div>
+  <div id="boxOnly">
+    <div class="note">Corner</div>
+    <div class="chips" id="cornerChips" style="margin:6px 0 12px"></div>
+    <div class="note">Size</div>
+    <div class="chips" id="sizeChips" style="margin:6px 0 12px"></div>
+  </div>
   <div class="note">Corner badge</div>
   <div class="chips" id="badgeChips" style="margin:6px 0 12px"></div>
   <label class="field">Event title (shown until set 1 ends)<input type="text" id="eventIn" maxlength="40" placeholder="e.g. Gulf Regionals" autocomplete="off"></label>
@@ -282,7 +283,6 @@
     <button class="big" data-act="intro">Match intro</button>
     <button class="big" data-act="potm">Player of the match</button>
     <button class="big" data-act="sponsor">Show sponsor</button>
-    <button class="big" data-act="dig">Dig (no point)</button>
   </div>
   <p class="note">The match intro opens with the tournament, then both teams with their starting six, the season so far, the format, and the teams again until the first point. Pick the tournament and round in Match setup. Sponsors come from the Sponsors tab of your sheet.</p>
   <h3>Break screen</h3>
@@ -682,11 +682,11 @@
   }
 
   // ---------------------------------------------------------------- lineups, server and stats for the video
-  /** Kill / ace / block / dig counts this match, per team and player, from the score log (undone points left out). */
+  /** Kill / ace / block counts this match, per team and player, from the score log (undone points left out). */
   function matchStats() {
     const out = {};
-    ['home', 'away'].forEach(side => { out[side] = { kills: 0, aces: 0, blocks: 0, digs: 0, players: {} }; });
-    const field = { KILL: 'kills', ACE: 'aces', BLOCK: 'blocks', DIG: 'digs' };
+    ['home', 'away'].forEach(side => { out[side] = { kills: 0, aces: 0, blocks: 0, players: {} }; });
+    const field = { KILL: 'kills', ACE: 'aces', BLOCK: 'blocks' };
     let any = false;
     events.forEach(e => {
       const f = field[e.kind];
@@ -695,7 +695,7 @@
       const t = out[e.side];
       t[f]++;
       if (e.number) {
-        const p = t.players[e.number] || (t.players[e.number] = { name: short(e.player || nameFor(e.side, e.number)).slice(0, 20), kills: 0, aces: 0, blocks: 0, digs: 0 });
+        const p = t.players[e.number] || (t.players[e.number] = { name: short(e.player || nameFor(e.side, e.number)).slice(0, 20), kills: 0, aces: 0, blocks: 0 });
         p[f]++;
         if (!p.name && e.player) p.name = short(e.player).slice(0, 20);
       }
@@ -749,7 +749,7 @@
     const st = matchStats();
     const p = st && st[side] && st[side].players[number];
     if (!p) return '';
-    return [['kills', 'KILLS'], ['aces', 'ACES'], ['blocks', 'BLOCKS'], ['digs', 'DIGS']].filter(([k]) => (p[k] || 0) > 0)
+    return [['kills', 'KILLS'], ['aces', 'ACES'], ['blocks', 'BLOCKS']].filter(([k]) => (p[k] || 0) > 0)
       .map(([k, w]) => p[k] + ' ' + (p[k] === 1 ? w.slice(0, -1) : w)).join('  ·  ');
   }
 
@@ -862,8 +862,9 @@
     fillCap();
     chips('serveChips', [{ label: 'Home', value: 'home' }, { label: 'Away', value: 'away' }, { label: 'Decide later', value: '' }],
       draft.firstServe, v => { draft.firstServe = v; fillSetup(); });
-    chips('layoutChips', [{ label: 'Bottom bar (like VNL)', value: 'bar' }, { label: 'Corner box', value: 'box' }],
+    chips('layoutChips', [{ label: 'Bottom bar (like VNL)', value: 'bar' }, { label: 'Corner box (legacy)', value: 'box' }],
       draft.layout || 'bar', v => { draft.layout = v; fillSetup(); });
+    $('boxOnly').classList.toggle('hidden', draft.layout !== 'box');   // corner and size only move the legacy box
     chips('cornerChips', [{ label: 'Top left', value: 'tl' }, { label: 'Top right', value: 'tr' }, { label: 'Bottom left', value: 'bl' }, { label: 'Bottom right', value: 'br' }],
       draft.corner, v => { draft.corner = v; fillSetup(); });
     chips('sizeChips', [{ label: 'Small', value: 0.85 }, { label: 'Medium', value: 1 }, { label: 'Large', value: 1.2 }],
@@ -1110,7 +1111,7 @@
   });
 
   // ---------------------------------------------------------------- how the point was won
-  const KIND_LABEL = { KILL: 'Kill', ACE: 'Ace', BLOCK: 'Block', DIG: 'Dig', OPP_ERROR: 'Opponent error' };
+  const KIND_LABEL = { KILL: 'Kill', ACE: 'Ace', BLOCK: 'Block', OPP_ERROR: 'Opponent error' };
 
   function askHow(side, eventIndex, canAce) {
     const ev = events[eventIndex] || {};
@@ -1341,19 +1342,6 @@
     });
   }
 
-  function startDig() {
-    chooseTeam('Dig · which team?', side => {
-      openPlayersFor(side, 'Dig · ' + M.name(match, side).toUpperCase() + ' · who?', (num, name) => {
-        events.push({ time: new Date().toISOString(), type: 'PLAY', side, set: match.setNumber, home: match.home, away: match.away,
-          setsHome: M.setsWon(match, 'home'), setsAway: M.setsWon(match, 'away'), serving: match.serving || '',
-          homeName: match.homeName, awayName: match.awayName, kind: 'DIG', number: num || '', player: name || '' });
-        saveEvents();
-        queueSave();
-        queuePlay('DIG', side, num, name ? short(name) : '', null, 'Dig' + (num ? ' · #' + num : ''));
-      });
-    });
-  }
-
   /** Names of the two teams playing (with their other spellings), so the service sends only their players. */
   function matchBases() {
     const out = [];
@@ -1507,7 +1495,6 @@
       case 'lineupclear': delete lineups[String(match.setNumber)]; saveLineups(); queueSave(); openLineups(); break;
       case 'sub': startSub(); break;
       case 'potm': startPotm(); break;
-      case 'dig': startDig(); break;
       case 'sponsor': if (!match) { toast('Set up the match first'); break; } queuePlay('SPONSOR', 'home', '', '', null, 'Sponsor card'); break;
       case 'intro':
         if (!match) { toast('Set up the match first'); break; }

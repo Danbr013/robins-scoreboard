@@ -30,13 +30,14 @@
   /** Who's serving waits a moment, so a kill or ace entered right after the point is shown first. */
   const SERVER_DELAY = 2500;
 
-  const STATS = [['kills', 'KILLS', 'KILL', 'KILL'], ['aces', 'ACES', 'ACE', 'ACE'], ['blocks', 'BLOCKS', 'BLOCK', 'BLOCK'], ['digs', 'DIGS', 'DIG', 'DIG']];
+  // Points only: a dig wins nothing, so it isn't a play on the video (an old board's DIG is ignored).
+  const STATS = [['kills', 'KILLS', 'KILL', 'KILL'], ['aces', 'ACES', 'ACE', 'ACE'], ['blocks', 'BLOCKS', 'BLOCK', 'BLOCK']];
   const statForPlay = kind => STATS.find(s => s[3] === kind) || null;
 
   function isMilestone(field, n) {
     if (field === 'kills') return n >= 5 && n % 5 === 0;
     if (field === 'aces' || field === 'blocks') return n >= 3 && n % 2 === 1;
-    return n >= 10 && n % 5 === 0;   // digs
+    return false;
   }
 
   function statLine(p) {
