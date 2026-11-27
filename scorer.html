@@ -238,6 +238,8 @@
   <div class="note">Round</div>
   <div class="chips" id="roundChips" style="margin:6px 0 8px"></div>
   <label class="field">Or type the round<input type="text" id="roundIn" maxlength="30" placeholder="e.g. Gold bracket semifinal" autocomplete="off"></label>
+  <div class="note">Season so far (last finish, points and league rank from the Team Hub)</div>
+  <div class="chips" id="introStatsChips" style="margin:6px 0 12px"></div>
   <label class="field">Storyline (optional)<input type="text" id="note1In" maxlength="70" placeholder="e.g. Last meeting: Emerald Coast, MacDill won 2–0" autocomplete="off"></label>
   <label class="field">Second storyline (optional)<input type="text" id="note2In" maxlength="70" placeholder="e.g. Robins are 6–2 at home this season" autocomplete="off"></label>
   <div class="note" id="introNote"></div>
@@ -913,11 +915,13 @@
     chips('roundChips', [{ label: 'None', value: '' }].concat(ROUNDS.map(r => ({ label: r, value: r }))), ROUNDS.indexOf(round) >= 0 || !round ? round : null,
       v => { draft.introRound = v; $('roundIn').value = ''; fillIntro(); });
     if (round && ROUNDS.indexOf(round) < 0 && document.activeElement !== $('roundIn')) $('roundIn').value = round;
+    chips('introStatsChips', [{ label: 'Show', value: true }, { label: 'Leave out', value: false }], draft.introStats !== false,
+      v => { draft.introStats = v; fillIntro(); });
     const notes = draft.introNotes || [];
     if (document.activeElement !== $('note1In')) $('note1In').value = notes[0] || '';
     if (document.activeElement !== $('note2In')) $('note2In').value = notes[1] || '';
     const it = composeIntro(draft);
-    const facts = ['home', 'away'].map(side => [it[side].seed, it[side].last].filter(Boolean).join(' · ')).filter(Boolean);
+    const facts = ['home', 'away'].map(side => [it[side].seed, it[side].last, it[side].rank].filter(Boolean).join(' · ')).filter(Boolean);
     $('introNote').textContent = !introData ? 'Tournaments, standings and last finishes appear here once the live-score service is updated (version 5).'
       : facts.length ? 'From the Team Hub: ' + facts.join(' | ') : 'No standings found for these teams; the intro shows the tournament, teams and format.';
   }
@@ -965,11 +969,10 @@
       const out = {};
       if (st) {
         const region = st.region ? st.region + ' Region' : '';
-        const rank = st.rank ? '#' + st.rank + ' in the league' : '';
-        out.seed = [region, regionals && st.seed ? '#' + st.seed + ' seed' : rank].filter(Boolean).join(' \u00b7 ');
-        out.rank = [st.pts ? st.pts + ' season pts' : '', rank].filter(Boolean).join(' \u00b7 ');
+        out.seed = [region, regionals && st.seed ? '#' + st.seed + ' seed' : ''].filter(Boolean).join(' \u00b7 ');
+        if (d.introStats !== false) out.rank = [st.pts ? st.pts + ' season pts' : '', st.rank ? '#' + st.rank + ' in the league' : ''].filter(Boolean).join(' \u00b7 ');
       }
-      if (fin && fin.event) out.last = 'Last out: ' + fin.event + ', ' + placeWord(fin.place) + (fin.of ? ' of ' + fin.of : '');
+      if (fin && fin.event && d.introStats !== false) out.last = 'Last out: ' + fin.event + ', ' + placeWord(fin.place) + (fin.of ? ' of ' + fin.of : '');
       return out;
     };
     return { event: ev ? ev.name : '', sub: ev ? ev.sub || '' : '', eventId: ev ? ev.id : '', place: ev ? ev.place || '' : '',
@@ -1015,7 +1018,8 @@
       homeKit: draft.homeKit || null, awayKit: draft.awayKit || null, division: draft.division || 'men',
       homeLogo: draft.homeLogo || null, awayLogo: draft.awayLogo || null, badge: draft.badge || null, eventTitle: draft.eventTitle,
       layout: draft.layout === 'box' ? 'box' : 'bar', introEvent: draft.introEvent || '', introEventName: draft.introEventName || '',
-      introRound: draft.introRound || '', introNotes: (draft.introNotes || []).slice(0, 2), intro: composeIntro(draft) };
+      introRound: draft.introRound || '', introNotes: (draft.introNotes || []).slice(0, 2), introStats: draft.introStats !== false,
+      intro: composeIntro(draft) };
   }
 
   function applySetup(newMatch) {
