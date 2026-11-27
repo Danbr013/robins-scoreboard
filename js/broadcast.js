@@ -365,7 +365,7 @@
       const play = M.playOf(m.word);
       if (!play) return m.word;
       const one = (D.statForPlay(m.word) || [])[2] || play.label;
-      const flush = m.word === 'ACE' && m.aces >= D.ROYAL_FLUSH ? 'ROYAL FLUSH  \u00b7  ' : '';
+      const hand = m.word === 'ACE' ? D.handName(m.aces) : '', flush = hand ? hand + '  \u00b7  ' : '';
       if (m.statement) return flush + (m.count > 0 ? D.ordinal(m.count) + ' ' + one + ' THIS MATCH' : play.label);
       return play.label + (m.count > 0 ? '  \u00b7  ' + D.ordinal(m.count) + ' ' + one : '');
     }
@@ -476,7 +476,7 @@
       fillRect(-bw / 2, bh / 2 + 16, bw, 2, CREAM);
       c.globalAlpha = 1;
 
-      // An ace: a card for every ace in a row (ROYAL FLUSH! at four, then the jokers).
+      // An ace: a card for every ace in a row (FOUR OF A KIND! at four, FIVE OF A KIND! with a joker, then ROYAL FLUSH!).
       const lay = ace ? aceLayout(Math.max(1, Math.min(D.MAX_CARDS, m.aces || 1))) : null;
       if (ace) aceCards(t, m, st, color, lay, Math.max(1, m.aces || 1));
       // The word slams in (with a speed trail for a kill), then shakes on impact.
@@ -617,8 +617,8 @@
     }
 
     // ---------------------------------------------------------------- the ace cards
-    // One card for every ace in a row by the same server: A♠ A♥ A♣ A♦ (four is a royal flush), the Little Joker
-    // (silver, the serving team's logo in a small badge), then the Big Joker (team color, gold trim, holographic,
+    // One card for every ace in a row by the same server: A♠ A♥ A♣ A♦ (four of a kind), the Little Joker
+    // (silver, the serving team's logo in a small badge: five of a kind), then the Big Joker (a royal flush: team color, gold trim, holographic,
     // the full logo and a 6x counter). The earlier cards are already fanned on the first frame; only the newest
     // flips over. From the 7th ace the Big Joker stays in front: its counter pulses (7x, 8x…) and a light sweeps it.
     // No jersey numbers on the cards: the name strip has the server.
@@ -627,9 +627,9 @@
     const CARD_W = 140, CARD_H = 196;
     function suitInk(card) { return card === 'H' || card === 'D' ? SUIT_RED : card === 'LJ' ? SILVER_INK : SUIT_BLACK; }
     /** The fan (its centre and card spacing) and the word beside it, in band coordinates (the screen is -640…640 wide).
-     *  A royal flush packs the cards closer and starts them at the left edge, for the longer word. */
+     *  From four the fan packs closer and starts at the left edge, for the longer word. */
     function aceLayout(n) {
-      if (n >= D.ROYAL_FLUSH) { const step = 40; return { step, fanX: -580 + (CARD_W + (n - 1) * step) / 2, wordX: 200, wordW: 740, word: 'ROYAL FLUSH!' }; }
+      if (n >= D.BIG_HAND) { const step = 40; return { step, fanX: -580 + (CARD_W + (n - 1) * step) / 2, wordX: 200, wordW: 780, word: D.handName(n) + '!' }; }
       return { step: 52, fanX: -330 - (n - 1) * 26, wordX: 104, wordW: 840, word: 'ACE!' };
     }
     /** Where card i of n sits in the fan: x, y and its tilt (radians). */
@@ -698,7 +698,7 @@
       c.fillRect(-width / 2, -ch, width, ch * 2);
       c.restore();
     }
-    /** An ace face up: A and the suit in two corners, a big pip in the middle. A royal flush gets gold edges. */
+    /** An ace face up: A and the suit in two corners, a big pip in the middle. From four of a kind the aces get gold edges. */
     function aceFace(card, royal) {
       const cw = CARD_W, ch = CARD_H, ink = suitInk(card);
       fillRR(-cw / 2, -ch / 2, cw, ch, 14, CARD_WHITE);
@@ -750,7 +750,7 @@
     /** The hand: the earlier cards already fanned, the newest on top flipping over (on the 6th ace the Little Joker
      *  slides back into the fan as the Big Joker flips). From the 7th the Big Joker is already up and its counter beats. */
     function aceCards(t, m, st, color, lay, aces) {
-      const n = Math.min(aces, D.MAX_CARDS), royal = n >= D.ROYAL_FLUSH, newest = n - 1, locked = aces > D.MAX_CARDS;
+      const n = Math.min(aces, D.MAX_CARDS), royal = n >= D.BIG_HAND, newest = n - 1, locked = aces > D.MAX_CARDS;
       const img = teamLogo(st, m.side);
       for (let i = 0; i < n; i++) {
         const slot = fanSlot(lay, i, n);

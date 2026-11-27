@@ -4,7 +4,7 @@
  * The scorer page downloads it as an Excel file (RobinsXlsx) and a box-score CSV.
  *
  *   RobinsBox.matchEvents(log)            → the current match's part of the log (a rename or a fresh 1–0 starts over)
- *   RobinsBox.compute(events, match, opts) → { title, teams: { home, away }, sets, plays, numbers }
+ *   RobinsBox.compute(events, match, opts) → { title, teams: { home, away }, sets, plays, numbers, gaps }
  *   RobinsBox.sheets(box) / RobinsBox.csv(box)
  *
  * opts: { court, division, nameOf(side, number) → roster name, lineups: { "1": { home: [...], away: [...] } },
@@ -146,7 +146,10 @@
         b.points - a.points || (Number(a.num) || 999) - (Number(b.num) || 999) || a.name.localeCompare(b.name));
       t.errorsMade = t.serveErrors + t.otherErrors;
     });
-    return { title, final, when, court: opts.court || '', division: opts.division || '', teams, sets, plays, numbers: opts.numbers || [],
+    // Roster gaps: numbers the scorer only knew by number (no name on the roster), for the Team Hub.
+    const gaps = [];
+    ['home', 'away'].forEach(side => teams[side].list.forEach(p => { if (p.num && !p.name) gaps.push({ side, number: p.num }); }));
+    return { title, final, when, court: opts.court || '', division: opts.division || '', teams, sets, plays, numbers: opts.numbers || [], gaps,
       serveInfo: teams.home.serveInfo || teams.away.serveInfo };
   }
 
@@ -167,7 +170,7 @@
       const t = box.teams[side];
       rows.push([{ v: t.name.toUpperCase(), s: 'bold' }, null, null, null, null, { v: t.total, s: 'bold' }]);
       rows.push(head);
-      t.list.forEach(p => rows.push([p.num ? Number(p.num) || p.num : '', p.name, p.kills, p.aces, p.blocks, p.points].concat(serve ? [p.serves, p.serveErrors] : [])));
+      t.list.forEach(p => rows.push([p.num ? Number(p.num) || p.num : '', p.name || (p.num ? '(not on roster)' : ''), p.kills, p.aces, p.blocks, p.points].concat(serve ? [p.serves, p.serveErrors] : [])));
       rows.push(['', 'TEAM', t.kills, t.aces, t.blocks, t.points].concat(serve ? [t.serves, t.serveErrors] : []).map(v => ({ v, s: 'total' })));
       rows.push(['', 'Points on ' + box.teams[OTHER[side]].name + ' errors', null, null, null, t.onTheirErrors]);
       if (t.unlabeled) rows.push(['', 'Points with no play entered', null, null, null, t.unlabeled]);
@@ -188,11 +191,13 @@
       ['Set', 'Score', 'Point to', 'How', 'Player', 'Served by', 'Time'].map(v => ({ v, s: 'head' })),
     ].concat(box.plays.map(p => [p.set, p.score, p.to || '', p.end ? p.how + ' · ' + p.end : p.how, p.player, p.server, clock(p.time)])) });
 
-    if (box.numbers.length) {
-      out.push({ name: 'Numbers to add', cols: [18, 30, 8], freeze: 1, rows: [
-        ['Team', 'Player', '#'].map(v => ({ v, s: 'head' })),
-      ].concat(box.numbers.map(n => [box.teams[n.side] ? box.teams[n.side].name : n.side, n.name, Number(n.number) || n.number])).concat([[],
-        [{ v: 'Typed in at the scorer page for players with no number on the roster. Add them to the Team Hub (League Rosters or Robins Rosters).', s: 'note' }]]) });
+    if (box.numbers.length || box.gaps.length) {
+      const team = side => box.teams[side] ? box.teams[side].name : side;
+      out.push({ name: 'Roster gaps', cols: [18, 8, 30, 44], freeze: 1, rows: [
+        ['Team', '#', 'Player', 'To fix in the Team Hub'].map(v => ({ v, s: 'head' })),
+      ].concat(box.gaps.map(g => [team(g.side), Number(g.number) || g.number, '', 'Number seen, no name on the roster: add the name']))
+        .concat(box.numbers.map(n => [team(n.side), Number(n.number) || n.number, n.name, 'No number on the roster: typed in today, add the number']))
+        .concat([[], [{ v: 'Fix these in League Rosters (other teams) or Robins Rosters, so the video and the stats have names and numbers next time.', s: 'note' }]]) });
     }
     return out;
   }
