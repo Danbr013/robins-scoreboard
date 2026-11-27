@@ -233,7 +233,7 @@
       const m = tag.moment;
       if (m.kind === 'RUN' && m.side) {
         const run = M.name(s, m.side).toUpperCase() + ' ' + m.count + '–0 RUN';
-        // A server who has held serve 5+ points in a row gets the streak: #10 TOLLIVER · 6 STRAIGHT ON SERVE.
+        // A server who has held serve 5+ points in a row gets the streak: #10 HARGROVE · 6 STRAIGHT ON SERVE.
         const who = m.number ? ('#' + m.number + ' ' + (m.name || '').toUpperCase() + (m.detail ? '  \u00b7  ' + m.detail + ' STRAIGHT ON SERVE' : ' SERVING'))
           .replace(/ +/g, ' ').trim() : '';
         const col = teamColor(st, m.side);
@@ -365,7 +365,8 @@
       const play = M.playOf(m.word);
       if (!play) return m.word;
       const one = (D.statForPlay(m.word) || [])[2] || play.label;
-      if (m.statement) return m.count > 0 ? D.ordinal(m.count) + ' ' + one + ' THIS MATCH' : play.label;
+      const flush = m.word === 'ACE' && m.aces >= D.ROYAL_FLUSH ? 'ROYAL FLUSH  \u00b7  ' : '';
+      if (m.statement) return flush + (m.count > 0 ? D.ordinal(m.count) + ' ' + one + ' THIS MATCH' : play.label);
       return play.label + (m.count > 0 ? '  \u00b7  ' + D.ordinal(m.count) + ' ' + one : '');
     }
 
@@ -432,7 +433,7 @@
     // KILL! / ACE! / MONSTER BLOCK!: a slanted band in the team's color across the screen for TAKEOVER_S.
     const BAND_Y = 316, BAND_H = 226, BAND_TILT = -4 * Math.PI / 180;
     function statement(s, st, shown) {
-      const m = shown.moment, t = shown.t, L = D.TAKEOVER_S;
+      const m = shown.moment, t = shown.t, L = m.hold || D.TAKEOVER_S;   // an ace holds a little longer
       const play = M.playOf(m.word) || { word: m.word + '!' };
       const color = teamColor(st, m.side), ink = textOn(color);
       const home = m.side === 'home', dir = home ? 1 : -1;
@@ -475,14 +476,16 @@
       fillRect(-bw / 2, bh / 2 + 16, bw, 2, CREAM);
       c.globalAlpha = 1;
 
-      if (ace) aceCard(t, m, color);
+      // An ace: a card for every ace in a row (ROYAL FLUSH! at four, then the jokers).
+      const lay = ace ? aceLayout(Math.max(1, Math.min(D.MAX_CARDS, m.aces || 1))) : null;
+      if (ace) aceCards(t, m, st, color, lay, Math.max(1, m.aces || 1));
       // The word slams in (with a speed trail for a kill), then shakes on impact.
-      const wordX = ace ? 104 : 0, wordY = -34;
+      const wordX = ace ? lay.wordX : 0, wordY = -34;
       const slam = easeOut((t - (monster ? 0.2 : 0.16)) / 0.18);
       if (slam > 0) {
-        const word = play.word;
+        const word = ace ? lay.word : play.word;
         const k = 1 + (monster ? 1.1 : 1.35) * (1 - slam);
-        const size = fitText(word, 184, ace ? 840 : 1150, 'd');
+        const size = fitText(word, 184, ace ? lay.wordW : 1150, 'd');
         c.save();
         c.translate(wordX, wordY); c.scale(k, k); c.transform(1, 0, -0.14, 1, 0, 0);
         font('d', size); c.textAlign = 'center';
@@ -613,41 +616,171 @@
       }
     }
 
-    /** An ace: a playing card flips over to show the server's number. */
-    function aceCard(t, m, color) {
-      const appear = easeOut((t - 0.1) / 0.16);
-      if (appear <= 0) return;
-      const flip = Math.PI * easeInOut((t - 0.24) / 0.42);
-      const sx = Math.max(0.03, Math.abs(Math.cos(flip)));
-      const front = flip > Math.PI / 2;
-      const cw = 140, ch = 196, ink = numberInk(color);
-      c.save();
-      c.translate(-330, -4); c.rotate(-8 * Math.PI / 180); c.scale(sx * appear, appear);
-      fillRR(-cw / 2 + 8, -ch / 2 + 10, cw, ch, 14, 'rgba(0,0,0,0.35)');
-      if (!front) {
-        fillRR(-cw / 2, -ch / 2, cw, ch, 14, darker(color, 0.7));
-        c.save();
-        rr(-cw / 2 + 9, -ch / 2 + 9, cw - 18, ch - 18, 9); c.clip();
-        c.strokeStyle = 'rgba(236,160,48,0.4)'; c.lineWidth = 2;
-        for (let i = -14; i <= 14; i++) {
-          c.beginPath(); c.moveTo(i * 18 - 200, -200); c.lineTo(i * 18 + 200, 200); c.stroke();
-          c.beginPath(); c.moveTo(i * 18 + 200, -200); c.lineTo(i * 18 - 200, 200); c.stroke();
-        }
-        c.restore();
-        c.lineWidth = 4; c.strokeStyle = GOLD; rr(-cw / 2 + 9, -ch / 2 + 9, cw - 18, ch - 18, 9); c.stroke();
+    // ---------------------------------------------------------------- the ace cards
+    // One card for every ace in a row by the same server: A♠ A♥ A♣ A♦ (four is a royal flush), the Little Joker
+    // (silver, the serving team's logo in a small badge), then the Big Joker (team color, gold trim, holographic,
+    // the full logo and a 6x counter). The earlier cards are already fanned on the first frame; only the newest
+    // flips over. From the 7th ace the Big Joker stays in front: its counter pulses (7x, 8x…) and a light sweeps it.
+    // No jersey numbers on the cards: the name strip has the server.
+    const SUIT_RED = '#C8102E', SUIT_BLACK = '#141416', CARD_WHITE = '#FBFAF6', SILVER_INK = '#3B4048';
+    const HAND = ['S', 'H', 'C', 'D', 'LJ', 'BJ'];
+    const CARD_W = 140, CARD_H = 196;
+    function suitInk(card) { return card === 'H' || card === 'D' ? SUIT_RED : card === 'LJ' ? SILVER_INK : SUIT_BLACK; }
+    /** The fan (its centre and card spacing) and the word beside it, in band coordinates (the screen is -640…640 wide).
+     *  A royal flush packs the cards closer and starts them at the left edge, for the longer word. */
+    function aceLayout(n) {
+      if (n >= D.ROYAL_FLUSH) { const step = 40; return { step, fanX: -580 + (CARD_W + (n - 1) * step) / 2, wordX: 200, wordW: 740, word: 'ROYAL FLUSH!' }; }
+      return { step: 52, fanX: -330 - (n - 1) * 26, wordX: 104, wordW: 840, word: 'ACE!' };
+    }
+    /** Where card i of n sits in the fan: x, y and its tilt (radians). */
+    function fanSlot(lay, i, n) {
+      const off = i - (n - 1) / 2;
+      return { x: lay.fanX + off * lay.step, y: -4 + off * off * 4, rot: (-8 + off * 6) * Math.PI / 180 };
+    }
+    function disc(x, y, r) { c.beginPath(); c.arc(x, y, r, 0, Math.PI * 2); c.fill(); }
+    function tri(a, b, d) { c.beginPath(); c.moveTo(a[0], a[1]); c.lineTo(b[0], b[1]); c.lineTo(d[0], d[1]); c.closePath(); c.fill(); }
+    /** A suit pip r tall each way from (x, y): S spade, H heart, D diamond, C club. */
+    function pip(kind, x, y, r, color) {
+      if (kind === 'D') return diamond(x, y, r, color);
+      c.fillStyle = color;
+      if (kind === 'H') {
+        disc(x - r * 0.48, y - r * 0.3, r * 0.52); disc(x + r * 0.48, y - r * 0.3, r * 0.52);
+        tri([x - r * 0.98, y - r * 0.16], [x + r * 0.98, y - r * 0.16], [x, y + r]);
+      } else if (kind === 'S') {
+        disc(x - r * 0.48, y + r * 0.18, r * 0.5); disc(x + r * 0.48, y + r * 0.18, r * 0.5);
+        tri([x - r * 0.97, y + r * 0.3], [x + r * 0.97, y + r * 0.3], [x, y - r]);
+        tri([x, y + r * 0.25], [x - r * 0.36, y + r], [x + r * 0.36, y + r]);
       } else {
-        fillRR(-cw / 2, -ch / 2, cw, ch, 14, CREAM);
-        c.lineWidth = 2.5; c.strokeStyle = ink; rr(-cw / 2 + 7, -ch / 2 + 7, cw - 14, ch - 14, 9); c.stroke();
-        const corner = () => { text('A', -cw / 2 + 21, -ch / 2 + 38, 'd', 28, ink, 'center'); diamond(-cw / 2 + 21, -ch / 2 + 52, 7, ink); };
-        corner();
-        c.save(); c.rotate(Math.PI); corner(); c.restore();
-        if (m.number) {
-          const ns = fitText(m.number, 78, cw - 60, 'd');
-          font('d', ns); c.textAlign = 'center';
-          text(m.number, 0, midline(m.number), 'd', ns, ink, 'center');
-        } else diamond(0, 0, 34, ink);
+        disc(x, y - r * 0.5, r * 0.38); disc(x - r * 0.48, y + r * 0.1, r * 0.38); disc(x + r * 0.48, y + r * 0.1, r * 0.38);
+        disc(x, y - r * 0.02, r * 0.28);
+        tri([x, y + r * 0.1], [x - r * 0.34, y + r], [x + r * 0.34, y + r]);
+      }
+    }
+    function star(x, y, r, color) {
+      c.fillStyle = color;
+      c.beginPath();
+      for (let i = 0; i < 10; i++) {
+        const a = -Math.PI / 2 + i * Math.PI / 5, d = i % 2 ? r * 0.42 : r;
+        if (i) c.lineTo(x + d * Math.cos(a), y + d * Math.sin(a)); else c.moveTo(x + d * Math.cos(a), y + d * Math.sin(a));
+      }
+      c.closePath(); c.fill();
+    }
+    /** The back: the serving team's color with a gold lattice. */
+    function cardBack(color) {
+      const cw = CARD_W, ch = CARD_H;
+      fillRR(-cw / 2, -ch / 2, cw, ch, 14, darker(color, 0.7));
+      c.save();
+      rr(-cw / 2 + 9, -ch / 2 + 9, cw - 18, ch - 18, 9); c.clip();
+      c.strokeStyle = 'rgba(236,160,48,0.4)'; c.lineWidth = 2;
+      for (let i = -14; i <= 14; i++) {
+        c.beginPath(); c.moveTo(i * 18 - 200, -200); c.lineTo(i * 18 + 200, 200); c.stroke();
+        c.beginPath(); c.moveTo(i * 18 + 200, -200); c.lineTo(i * 18 - 200, 200); c.stroke();
       }
       c.restore();
+      c.lineWidth = 4; c.strokeStyle = GOLD; rr(-cw / 2 + 9, -ch / 2 + 9, cw - 18, ch - 18, 9); c.stroke();
+    }
+    /** "JOKER" down the top-left corner (and upside down in the bottom-right one). */
+    function jokerCorners(ink) {
+      const cw = CARD_W, ch = CARD_H;
+      const corner = () => 'JOKER'.split('').forEach((l, i) => text(l, -cw / 2 + 20, -ch / 2 + 32 + i * 14, 'c', 15, ink, 'center'));
+      corner();
+      c.save(); c.rotate(Math.PI); corner(); c.restore();
+    }
+    /** A diagonal band of light across the card (clipped to it), p from 0 to 1. */
+    function sheen(p, colors, width) {
+      const cw = CARD_W, ch = CARD_H;
+      if (p <= 0 || p >= 1) return;
+      c.save();
+      rr(-cw / 2, -ch / 2, cw, ch, 14); c.clip();
+      const x = -cw - width + p * (2 * cw + 2 * width);
+      c.translate(x, 0); c.rotate(0.42);
+      c.fillStyle = hgrad(-width / 2, width / 2, colors);
+      c.fillRect(-width / 2, -ch, width, ch * 2);
+      c.restore();
+    }
+    /** An ace face up: A and the suit in two corners, a big pip in the middle. A royal flush gets gold edges. */
+    function aceFace(card, royal) {
+      const cw = CARD_W, ch = CARD_H, ink = suitInk(card);
+      fillRR(-cw / 2, -ch / 2, cw, ch, 14, CARD_WHITE);
+      c.lineWidth = 2.5; c.strokeStyle = ink; rr(-cw / 2 + 7, -ch / 2 + 7, cw - 14, ch - 14, 9); c.stroke();
+      if (royal) { c.lineWidth = 4; c.strokeStyle = GOLD; rr(-cw / 2 + 2, -ch / 2 + 2, cw - 4, ch - 4, 12); c.stroke(); }
+      const corner = () => { text('A', -cw / 2 + 21, -ch / 2 + 38, 'd', 28, ink, 'center'); pip(card, -cw / 2 + 21, -ch / 2 + 53, 7.5, ink); };
+      corner();
+      c.save(); c.rotate(Math.PI); corner(); c.restore();
+      pip(card, 0, 0, 36, ink);
+    }
+    /** The Little Joker: silver foil, the serving team's logo in a small dark badge, in grey. */
+    function littleJoker(img, t) {
+      const cw = CARD_W, ch = CARD_H;
+      c.fillStyle = grad(-cw / 2, -ch / 2, cw / 2, ch / 2, ['#EEF0F3', '#B9BFC7', '#E2E5E9', '#A9AFB8']);
+      rr(-cw / 2, -ch / 2, cw, ch, 14); c.fill();
+      c.lineWidth = 2.5; c.strokeStyle = SILVER_INK; rr(-cw / 2 + 7, -ch / 2 + 7, cw - 14, ch - 14, 9); c.stroke();
+      jokerCorners(SILVER_INK);
+      c.fillStyle = '#15171B'; disc(0, 0, 38);
+      c.lineWidth = 3; c.strokeStyle = '#D5D9DF'; c.beginPath(); c.arc(0, 0, 38, 0, Math.PI * 2); c.stroke();
+      if (img) {
+        c.save();
+        if ('filter' in c) c.filter = 'grayscale(1) brightness(1.15)';
+        fit(img, -27, -27, 54, 54, false);
+        c.restore();
+      } else star(0, 0, 24, '#D5D9DF');
+      sheen(((t * 0.55) % 1.4) / 1.4, ['rgba(255,255,255,0)', 'rgba(255,255,255,0.55)', 'rgba(255,255,255,0)'], 46);
+    }
+    /** The Big Joker: the serving team's color (dark when the color is light, so the logo reads), gold trim,
+     *  a holographic sheen, the full logo and the streak counter (6x, 7x…). pulse: 0…1 for the counter's beat. */
+    function bigJoker(img, color, t, count, pulse) {
+      const cw = CARD_W, ch = CARD_H;
+      const base = lum(color) > 0.45 ? '#17191D' : color;
+      c.fillStyle = grad(-cw / 2, -ch / 2, cw / 2, ch / 2, [base, darker(base, 0.55)]);
+      rr(-cw / 2, -ch / 2, cw, ch, 14); c.fill();
+      sheen(((t * 0.45) % 1.3) / 1.3, ['rgba(255,0,128,0)', 'rgba(255,80,160,0.22)', 'rgba(255,220,0,0.26)', 'rgba(0,230,160,0.24)',
+        'rgba(0,140,255,0.22)', 'rgba(140,0,255,0)'], 90);
+      c.lineWidth = 5; c.strokeStyle = GOLD; rr(-cw / 2 + 2.5, -ch / 2 + 2.5, cw - 5, ch - 5, 12); c.stroke();
+      c.lineWidth = 1.5; c.strokeStyle = GOLD; rr(-cw / 2 + 10, -ch / 2 + 10, cw - 20, ch - 20, 8); c.stroke();
+      jokerCorners(GOLD);
+      if (img) fit(img, -44, -58, 88, 88, false); else star(0, -14, 34, GOLD);
+      const label = count + 'x', k = 1 + 0.35 * pulse;
+      c.save();
+      c.translate(0, 58); c.scale(k, k);
+      font('d', 26); const w = Math.max(48, measure(label) + 22);
+      fillRR(-w / 2, -15, w, 30, 15, GOLD);
+      text(label, 0, 9, 'd', 26, BLACK, 'center');
+      c.restore();
+    }
+    /** The hand: the earlier cards already fanned, the newest on top flipping over (on the 6th ace the Little Joker
+     *  slides back into the fan as the Big Joker flips). From the 7th the Big Joker is already up and its counter beats. */
+    function aceCards(t, m, st, color, lay, aces) {
+      const n = Math.min(aces, D.MAX_CARDS), royal = n >= D.ROYAL_FLUSH, newest = n - 1, locked = aces > D.MAX_CARDS;
+      const img = teamLogo(st, m.side);
+      for (let i = 0; i < n; i++) {
+        const slot = fanSlot(lay, i, n);
+        let x = slot.x, y = slot.y, rot = slot.rot, sx = 1, k = 1, front = true;
+        if (i === newest && !locked) {
+          const start = n === D.MAX_CARDS ? 0.3 : 0.24;    // the Big Joker waits for the Little Joker to make room
+          const appear = easeOut((t - (start - 0.14)) / 0.16);
+          if (appear <= 0) continue;
+          const flip = Math.PI * easeInOut((t - start) / 0.42);
+          sx = Math.max(0.03, Math.abs(Math.cos(flip))) * appear;
+          k = appear;
+          front = flip > Math.PI / 2;
+          if (HAND[i] === 'BJ') k *= 1 + 0.12 * Math.max(0, 1 - Math.abs(t - start - 0.5) / 0.12);   // it lands with a thump
+        } else if (n === D.MAX_CARDS && i === newest - 1 && !locked) {
+          // The Little Joker starts in the front slot and slides back into the fan.
+          const from = fanSlot(lay, newest, n), p = easeInOut((t - 0.05) / 0.28);
+          x = from.x + (x - from.x) * p; y = from.y + (y - from.y) * p; rot = from.rot + (rot - from.rot) * p;
+        }
+        c.save();
+        c.translate(x, y); c.rotate(rot); c.scale(sx * k, k);
+        fillRR(-CARD_W / 2 + 8, -CARD_H / 2 + 10, CARD_W, CARD_H, 14, 'rgba(0,0,0,0.35)');
+        if (!front) cardBack(color);
+        else if (HAND[i] === 'LJ') littleJoker(img, t);
+        else if (HAND[i] === 'BJ') {
+          const beat = locked ? Math.max(0, Math.sin(4 * Math.PI * Math.min(1, Math.max(0, (t - 0.3) / 0.9)))) : 0;   // two beats
+          bigJoker(img, color, t, aces, beat);
+          if (locked) sheen((t - 0.35) / 0.6, ['rgba(255,255,255,0)', 'rgba(255,255,255,0.7)', 'rgba(255,255,255,0)'], 60);
+        } else aceFace(HAND[i], royal);
+        c.restore();
+      }
     }
 
     /** A monster block: a shock line and debris where the band lands. */

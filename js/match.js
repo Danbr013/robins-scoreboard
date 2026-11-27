@@ -274,6 +274,27 @@
     return words.slice(i).join(' ');
   }
 
+  /** The nickname a roster gives in quotes: "Marcus “Moe” Hargrove" → "Moe"; '' when there is none. */
+  function nickname(full) {
+    const m = /[“"]([^”"]+)[”"]/.exec(String(full || ''));
+    return m ? m[1].replace(/\s+/g, ' ').trim() : '';
+  }
+
+  /**
+   * The name on a play card or tag: the nickname with the surname when the roster gives one ("Moe Hargrove"),
+   * else the surname alone ("Del Toro"). last: the surname the roster gives outright, if any.
+   * Film Room uses the same rule (scoring.stream_name).
+   */
+  function streamName(full, last) {
+    const sur = last || lastName(full), nick = nickname(full);
+    return nick && sur ? nick + ' ' + sur : sur || nick;
+  }
+
+  /** The whole name for player of the match, nickname kept: 'Marcus “Moe” Hargrove' (straight quotes made curly). */
+  function fullName(full) {
+    return String(full || '').replace(/"([^"]+)"/g, '“$1”').replace(/\s+/g, ' ').trim();
+  }
+
   /** True for a complete match state (guards against old or damaged saved boards). */
   function isValid(s) {
     if (!s || typeof s !== 'object' || !s.format || !Array.isArray(s.completedSets)) return false;
@@ -309,7 +330,7 @@
     PRESETS, CAP_CHOICES, TIMEOUT_CHOICES, isValid, DEFAULT_FORMAT, normFormat, presetFor, capFor, timeoutLimit, timeoutsLeft,
     other, setsToWin, targetFor, isSetWon, formatLabel, formatWords, sameFormat,
     newMatch, point, removePoint, setServing, timeout, rename,
-    points, name, timeouts, setsWon, situation, matchWinner, bannerFor, textOn, luminance, lastName,
+    points, name, timeouts, setsWon, situation, matchWinner, bannerFor, textOn, luminance, lastName, nickname, streamName, fullName,
   };
   root.RobinsMatch = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;

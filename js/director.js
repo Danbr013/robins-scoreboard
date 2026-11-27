@@ -38,6 +38,10 @@
   // Points only: a dig wins nothing, so it isn't a play on the video (an old board's DIG is ignored).
   // [field, plural, one]; which play counts in which column is RobinsMatch.PLAYS.
   const STATS = [['kills', 'KILLS', 'KILL'], ['aces', 'ACES', 'ACE'], ['blocks', 'BLOCKS', 'BLOCK']];
+  /** Aces in a row by one server: one card each (♠ ♥ ♦ ♣); four is a royal flush, then a joker, then both jokers. */
+  const ROYAL_FLUSH = 4, MAX_CARDS = 6;
+  /** An ace's takeover holds this much longer than TAKEOVER_S, to read the cards and the streak. */
+  const ACE_HOLD_S = 0.6;
   const statForPlay = kind => { const p = M.playOf(kind); return p ? STATS.find(s => s[0] === p.stat) : null; };
   /** How long after a point its play can still use what the point did (saved a set point, a run…). */
   const CONTEXT_MS = 40000;
@@ -99,8 +103,8 @@
         monsters: { home: [], away: [] } };
     }
 
-    function moment(kind, f) { return Object.assign({ kind, side: null, number: '', name: '', word: '', detail: '', count: 0, out: '', outName: '',
-      setNumber: 0, home: 0, away: 0, sponsor: -1, until: 0, stats: null, seconds: seconds(kind), wait: maxWait(kind), statement: false, context: '',
+    function moment(kind, f) { return Object.assign({ kind, side: null, number: '', name: '', word: '', detail: '', count: 0, aces: 0, out: '', outName: '',
+      setNumber: 0, home: 0, away: 0, sponsor: -1, until: 0, stats: null, seconds: seconds(kind), wait: maxWait(kind), statement: false, context: '', hold: 0,
       queuedAt: 0, startedAt: 0, notBefore: 0 }, f || {}); }
     function enqueue(m, now) { m.queuedAt = now; queue.push(m); }
     function tag(m, now) { m.startedAt = now; tags = tags.filter(t => t.kind !== m.kind); tags.push(m); }
@@ -154,7 +158,7 @@
 
     /**
      * Points won on one server's serve (the server is who the board before the point named). Returns the run that
-     * just ended when it was 5 or more ("#10 TOLLIVER SERVED 8 STRAIGHT").
+     * just ended when it was 5 or more ("#10 HARGROVE SERVED 8 STRAIGHT").
      */
     function serving(px, scorer) {
       const srv = px && px.server && px.server.number ? px.server : null;
@@ -317,6 +321,8 @@
           const same = aceRun && rally && aceRun.side === side && aceRun.number === (p.number || '') && aceRun.set === rally.set && rally.total === aceRun.total + 1;
           aceRun = rally ? { side, number: p.number || '', set: rally.set, total: rally.total, count: same ? aceRun.count + 1 : 1 } : null;
           if (aceRun && aceRun.count >= 2) special = aceRun.count === 2 ? 'BACK-TO-BACK ACES' : aceRun.count + ' STRAIGHT ACES';
+          // A card for every ace in the run: four is the royal flush (confetti), five adds a joker, six both.
+          if (aceRun && aceRun.count >= ROYAL_FLUSH) party = true;
         }
         if ((kind === 'MONSTER' || kind === 'KONG') && rally && rally.set === track.set) {
           // Block party: two monster blocks within 5 rallies, or three in a set.
@@ -326,7 +332,9 @@
           if (near || list.length >= 3) { party = true; special = 'BLOCK PARTY'; }
         }
         enqueue(moment('PLAY', { side, number: p.number || '', name: p.name || '', word: kind, count: pl ? pl[play.stat] : 0, statement, party,
-          context: statement ? contextFor(side, p, now, special) : '', seconds: statement ? STATEMENT_S : POINT_S, wait: statement ? 30 : POINT_WAIT_S }), now);
+          aces: kind === 'ACE' && aceRun ? aceRun.count : 0, hold: statement ? TAKEOVER_S + (kind === 'ACE' ? ACE_HOLD_S : 0) : 0,
+          context: statement ? contextFor(side, p, now, special) : '', wait: statement ? 30 : POINT_WAIT_S,
+          seconds: statement ? STATEMENT_S + (kind === 'ACE' ? ACE_HOLD_S : 0) : POINT_S }), now);
       } else if (kind === 'SERVE_ERROR') {
         // The other team missed its serve. After this team's own timeout, that's the timeout icing the server.
         const lp = lastPoint;
@@ -393,8 +401,9 @@
       let takeover = null;
       if (shown && shown.kind === 'ICED') { takeover = shown; shown = null; }
       else if (shown && shown.kind === 'PLAY' && a.statement) {
-        if (shown.t < TAKEOVER_S) { takeover = shown; shown = null; }
-        else shown = Object.assign({}, shown, { t: shown.t - TAKEOVER_S, length: shown.length - TAKEOVER_S });
+        const hold = a.hold || TAKEOVER_S;
+        if (shown.t < hold) { takeover = shown; shown = null; }
+        else shown = Object.assign({}, shown, { t: shown.t - hold, length: shown.length - hold });
       }
       const s = last;
       const sit = s ? M.situation(s) : null;
@@ -431,7 +440,7 @@
     };
   }
 
-  const api = { Director, KINDS, TAKEOVER_S, STATEMENT_S, POINT_S, extrasFrom, isMilestone, statLine, ordinal, statForPlay };
+  const api = { Director, KINDS, TAKEOVER_S, STATEMENT_S, POINT_S, ROYAL_FLUSH, MAX_CARDS, ACE_HOLD_S, extrasFrom, isMilestone, statLine, ordinal, statForPlay };
   root.RobinsDirector = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);
