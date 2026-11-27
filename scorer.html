@@ -111,6 +111,10 @@
   .tips li b { color: var(--gold); }
   .warn { background: #3b2f10; border-radius: 12px; padding: 10px 12px; margin: 12px 0; line-height: 1.35; }
   .pill.queue { background: var(--panel2); color: var(--gold); cursor: pointer; }
+  .ghostbar { display: block; width: 100%; margin: 6px 0 0; padding: 12px; border: 0; border-radius: 10px; background: var(--gold); color: var(--black); font-weight: 800; font-size: 15px; letter-spacing: .03em; }
+  .librow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 2px 0 12px; }
+  .librow .slot { min-width: 58px; }
+  .librow .chip { padding: 6px 11px; font-size: 14px; }
   .players { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
   .pbtn { border: 1px solid var(--line); background: var(--panel); border-radius: 12px; padding: 8px 4px 6px; text-align: center; min-height: 78px; }
   .pbtn b { display: block; font-family: 'Bebas Neue', sans-serif; font-size: 34px; font-weight: 400; line-height: 1; }
@@ -129,6 +133,7 @@
     <span id="queuePill" class="pill queue hidden" data-act="clearqueue"></span>
     <span id="sync" class="pill busy">CONNECTING</span>
   </header>
+  <button id="ghostPill" class="ghostbar hidden" data-act="ghostpoint"></button>
   <div id="situation"></div>
   <div id="history"></div>
   <main>
@@ -209,7 +214,8 @@
     <button class="big" data-act="numonly">Use #</button>
   </div>
   <div class="stack" style="margin-top:12px">
-    <button class="big" data-act="noplayer">No player · just the play</button>
+    <button class="big" data-act="noplayer" id="noPlayerBtn">No player · just the play</button>
+    <button class="big hidden" data-act="ghostslot" id="ghostBtn">Ghost player (playing with five)</button>
     <button class="big" data-act="rosterrefresh">Reload rosters from the Team Hub</button>
   </div>
 </div>
@@ -278,7 +284,7 @@
 <!-- Starting lineups (serving order) -->
 <div id="lineup" class="sheet hidden">
   <div class="bar"><h2 id="lineupTitle">Starting lineups</h2><button class="link" data-act="lineupdone">Done</button></div>
-  <p class="note">Enter each team's six in <b>serving order</b>: I serves first, then II, III… The video then shows who's serving, and it moves on by itself with every side-out. Subs (More → Substitution) swap a player in place.</p>
+  <p class="note">Enter each team's six in <b>serving order</b>: I serves first, then II, III… The video then shows who's serving, and it moves on by itself with every side-out. Subs (More → Substitution) swap a player in place. A libero coming in for a back-row middle isn't a sub: leave it out, the middle comes back to serve. Under USAV rules the libero may serve in one rotation: pick the libero and the slot they serve for. Playing with five? Put the Ghost player in the empty slot: when it comes up to serve, the point and the serve go to the other team.</p>
   <div id="lineupTeams"></div>
   <div class="stack" style="margin-top:14px">
     <button class="big" data-act="lineupcopy" id="lineupCopyBtn">Same as last set</button>
@@ -323,7 +329,11 @@
       <button class="big" data-act="msg" data-sec="0">Show until cleared</button>
     </div>
     <button class="big" data-act="clearbanner">Clear message</button>
-    <button class="big" data-act="csv">Download score log (CSV)</button>
+    <button class="big gold" data-act="xlsx">Download match stats (Excel)</button>
+    <div class="grid2">
+      <button class="big" data-act="boxcsv">Box score (CSV)</button>
+      <button class="big" data-act="csv">Raw score log (CSV)</button>
+    </div>
     <button class="big" data-act="tips">Scorer tips</button>
   </div>
   <h3>Camera phone (Robins Live on Android)</h3>
@@ -372,6 +382,8 @@
 
 <script src="config.js"></script>
 <script src="js/match.js"></script>
+<script src="js/xlsx.js"></script>
+<script src="js/boxscore.js"></script>
 <script src="js/teams.js"></script>
 <script src="js/api.js"></script>
 <script src="js/qrcode.js"></script>
@@ -434,6 +446,12 @@
   // Starting lineups per set, in serving order: { "1": { home: ["7", …6], away: [] }, … }
   let lineups = (function () { try { return JSON.parse(A.store(LS + 'lineups') || '{}'); } catch (e) { return {}; } })();
   function saveLineups() { A.store(LS + 'lineups', JSON.stringify(lineups)); }
+  const GHOST = 'GHOST';       // a lineup slot for the ghost player (bylaws 4.2.2: playing with five)
+  // Numbers typed in for players the roster has none for, per team and division: { key: { name, number } }.
+  let todayNums = (function () { try { return JSON.parse(A.store(LS + 'nums') || '{}'); } catch (e) { return {}; } })();
+  function numKey(side, name) { return (style[side + 'Logo'] || side) + '|' + (style.division || 'men') + '|' + nameKey(name); }
+  function setTodayNumber(side, name, n) { todayNums[numKey(side, name)] = { name, number: n }; A.store(LS + 'nums', JSON.stringify(todayNums)); }
+  function todayNumber(side, name) { const x = todayNums[numKey(side, name)]; return x ? x.number : ''; }
   let pickCb = null;           // set when the player list picks for something other than a point (sub, lineup, player of the match)
   function saveEvents() { A.store(LS + 'log', JSON.stringify(events.slice(-2000))); }
 
@@ -483,6 +501,9 @@
   // ---------------------------------------------------------------- scoring screen
   function render() {
     if (!match) return;
+    const g = currentServer();
+    $('ghostPill').classList.toggle('hidden', !(g && g.ghost));
+    if (g && g.ghost) $('ghostPill').textContent = 'GHOST SERVES · POINT TO ' + M.name(match, M.other(g.side)).toUpperCase();
     ['home', 'away'].forEach(side => {
       const color = style[side + 'Color'] || (side === 'home' ? '#BE121C' : '#3A5A8C');
       $(side + 'Tap').style.background = color;
@@ -519,17 +540,17 @@
     return cardToSend || serverCard || null;
   }
 
-  function record(type, side) {
+  function record(type, side, extra) {
     const s = match;
-    events.push({ time: new Date().toISOString(), type, side: side || '', set: s.setNumber,
+    events.push(Object.assign({ time: new Date().toISOString(), type, side: side || '', set: s.setNumber,
       home: s.home, away: s.away, setsHome: M.setsWon(s, 'home'), setsAway: M.setsWon(s, 'away'),
-      serving: s.serving || '', homeName: s.homeName, awayName: s.awayName, kind: '', number: '', player: '' });
+      serving: s.serving || '', homeName: s.homeName, awayName: s.awayName, kind: '', number: '', player: '' }, extra || {}));
     saveEvents();
     return events.length - 1;
   }
 
   /** Applies one scoring action, keeps it for undo and sends the new board. */
-  function commit(result, side) {
+  function commit(result, side, extra) {
     if (!result.type) return -1;
     const entry = { match, style };
     undoStack.push(entry);
@@ -542,7 +563,7 @@
     const card = currentCard();
     if (scored && card && ['soon', 'break', 'timeout', 'brb', 'intro'].indexOf(card.type) >= 0) cardToSend = null; // play resumed
     if (result.type === 'SET_END' && !match.matchOver) setTimeout(() => toast('Set ' + match.setNumber + ': More → Starting lineups for this set’s six'), 1800);
-    const index = record(result.type, side);
+    const index = record(result.type, side, extra);
     entry.eventIndex = index;
     if (result.type === 'CORRECTION') entry.removed = markRemoved(side);
     render();
@@ -576,7 +597,7 @@
     switch (op) {
       case 'point': {
         const servedBefore = match.serving;
-        const index = commit(M.point(match, side), side);
+        const index = commit(M.point(match, side), side, serverForLog());
         if (index < 0) toast('The match is over. Start a new one in Match setup.');
         else askHow(side, index, servedBefore === side);
         break;
@@ -749,19 +770,31 @@
       prev = e.side;
     });
     if (turns[match.serving] < 0) return null;
-    const number = order[turns[match.serving] % 6];
+    const slot = turns[match.serving] % 6;
+    const number = order[slot];
     if (!number) return null;
-    const p = rosterFor(match.serving).find(x => x.num === number);
-    return { side: match.serving, number, name: p ? short(p.name).slice(0, 26) : '' };
+    if (number === GHOST) return { side: match.serving, number: '', name: '', full: '', slot, ghost: true };
+    // USAV: the libero may serve in one rotation, the slot picked in the lineups.
+    const lib = lu[match.serving + 'Libero'];
+    const who = lib && lu[match.serving + 'LiberoFor'] === slot ? lib : number;
+    const p = rosterFor(match.serving).find(x => x.num === who);
+    return { side: match.serving, number: who, name: p ? short(p.name).slice(0, 26) : '', full: p ? p.name : '', slot, libero: who === lib };
+  }
+
+  /** Who served the rally, kept with the point for the match stats (the lineups give it). */
+  function serverForLog() {
+    const srv = currentServer();
+    if (!srv) return {};
+    return srv.ghost ? { serverSide: srv.side, ghost: true } : { serverSide: srv.side, server: srv.number, serverName: srv.full || srv.name };
   }
 
   function matchWithExtras() {
     if (!match) return match;
     const extra = {};
     const lu = lineupFor(match.setNumber);
-    if (lu) extra.lineup = { home: (lu.home || []).filter(Boolean), away: (lu.away || []).filter(Boolean) };
+    if (lu) extra.lineup = { home: (lu.home || []).filter(n => n && n !== GHOST), away: (lu.away || []).filter(n => n && n !== GHOST) };
     const srv = currentServer();
-    if (srv) extra.server = srv;
+    if (srv && !srv.ghost) extra.server = { side: srv.side, number: srv.number, name: srv.name };
     const st = matchStats();
     if (st) extra.stats = st;
     return Object.keys(extra).length ? Object.assign({}, match, extra) : match;
@@ -1189,7 +1222,7 @@
   // ---------------------------------------------------------------- names for the video
   /** Surnames the rosters give outright (Team Hub Players tab for Robins, Last name on stream elsewhere). */
   let LAST = {};
-  const nameKey = n => String(n || '').replace(/[“"][^”"]*[”"]/g, ' ').toLowerCase().replace(/[^a-z0-9]+/g, '');
+  function nameKey(n) { return String(n || '').replace(/[“"][^”"]*[”"]/g, ' ').toLowerCase().replace(/[^a-z0-9]+/g, ''); }
   function learnLastNames(res) {
     LAST = {};
     Object.keys(res.lastNames || {}).forEach(k => { if (res.lastNames[k]) LAST[nameKey(k)] = res.lastNames[k]; });
@@ -1212,6 +1245,7 @@
       list = rosters.league.filter(r => T.baseMatches(r[0], t) && (div === 'coed' ? r[4] === 1 : r[1] === want))
         .map(r => ({ num: r[2], name: r[3], note: div === 'coed' ? (r[1] === 'W' ? 'Women' : 'Men') : '' }));
     }
+    list.forEach(p => { if (!p.num) { const today = todayNumber(side, p.name); if (today) { p.num = today; p.note = (p.note ? p.note + ' · ' : '') + 'number typed in today'; } } });
     const n = v => (/^\d+$/.test(v) ? Number(v) : 999);
     return list.sort((a, b) => n(a.num) - n(b.num) || a.name.localeCompare(b.name));
   }
@@ -1222,9 +1256,12 @@
   }
 
   /** The player list for [side]; [cb](number, name) gets the pick instead of a point's play. */
+  let ghostOk = false;   // the Ghost player button, only when picking a lineup slot
   function openPlayersFor(side, title, cb, first) {
     pickCb = cb;
     showPlayers(side, title, first);
+    $('ghostBtn').classList.toggle('hidden', !ghostOk);
+    ghostOk = false;
   }
 
   let lastShown = null;
@@ -1295,8 +1332,14 @@
     const b = e.target.closest('[data-player]');
     if (!b || Date.now() - holdFired < 800) return;   // the finger that held a play button lifting over the list
     const p = $('playerList')._list[Number(b.dataset.player)];
+    if (!p.num && p.name && lastShown) {
+      // No number on the roster: ask what they're wearing today, keep it (and list it in the match stats to add to the Team Hub).
+      const n = String(prompt('What number is ' + p.name + ' wearing today?') || '').replace(/[^0-9]/g, '').slice(0, 3);
+      if (n) { setTodayNumber(lastShown[0], p.name, n); picked(n, p.name); return; }
+    }
     picked(p.num, p.name);
   });
+
 
   /** The roster name for a typed number, when only one player on that team wears it. */
   function nameFor(side, number) {
@@ -1344,17 +1387,44 @@
     lineups[n] = lu;
     const srv = currentServer();
     $('lineupTitle').textContent = 'Starting lineups · set ' + n;
-    $('lineupTeams').innerHTML = ['home', 'away'].map(side => '<h3>' + esc(M.name(match, side).toUpperCase()) + '</h3><div class="slots">' +
-      ROMAN.map((r, i) => '<button class="slot' + (srv && srv.side === side && srv.number === lu[side][i] ? ' serving' : '') + '" data-slot="' + side + ':' + i + '"><small>' + r +
-        '</small><b>' + (lu[side][i] ? esc(lu[side][i]) : '·') + '</b></button>').join('') + '</div>').join('');
+    $('lineupTeams').innerHTML = ['home', 'away'].map(side => {
+      const lib = lu[side + 'Libero'] || '', libFor = lu[side + 'LiberoFor'];
+      return '<h3>' + esc(M.name(match, side).toUpperCase()) + '</h3><div class="slots">' +
+        ROMAN.map((r, i) => '<button class="slot' + (srv && srv.side === side && srv.slot === i ? ' serving' : '') + '" data-slot="' + side + ':' + i + '"><small>' + r +
+          '</small>' + (lu[side][i] === GHOST ? '<b style="font-size:15px;line-height:2">GHOST</b>' : '<b>' + (lu[side][i] ? esc(lu[side][i]) : '·') + '</b>') + '</button>').join('') +
+        '</div><div class="librow"><button class="slot" data-lib="' + side + '"><small>LIBERO</small><b>' + (lib ? esc(lib) : '·') + '</b></button>' +
+        (lib ? '<span class="note" style="margin:0 4px">serves for</span>' + ['none'].concat(ROMAN).map((r, i) =>
+          '<button class="chip' + ((typeof libFor === 'number' ? libFor : -1) === i - 1 ? ' on' : '') + '" data-libfor="' + side + ':' + (i - 1) + '">' + r + '</button>').join('') : '') +
+        '</div>';
+    }).join('');
     const prev = lineups[String(match.setNumber - 1)];
     $('lineupCopyBtn').classList.toggle('hidden', !prev);
     show('lineup');
   }
   $('lineupTeams').addEventListener('click', e => {
+    const lb = e.target.closest('[data-lib]');
+    if (lb) {
+      const side = lb.dataset.lib;
+      openPlayersFor(side, M.name(match, side).toUpperCase() + ' · libero', num => {
+        const lu = lineups[String(match.setNumber)];
+        lu[side + 'Libero'] = num || '';
+        if (!num) delete lu[side + 'LiberoFor'];
+        saveLineups(); queueSave(); openLineups();
+      });
+      return;
+    }
+    const fb = e.target.closest('[data-libfor]');
+    if (fb) {
+      const [side, i] = fb.dataset.libfor.split(':');
+      const lu = lineups[String(match.setNumber)];
+      if (Number(i) < 0) delete lu[side + 'LiberoFor']; else lu[side + 'LiberoFor'] = Number(i);
+      saveLineups(); queueSave(); openLineups();
+      return;
+    }
     const b = e.target.closest('[data-slot]');
     if (!b) return;
     const [side, i] = b.dataset.slot.split(':');
+    ghostOk = true;
     openPlayersFor(side, M.name(match, side).toUpperCase() + ' · position ' + ROMAN[i] + (i === '0' ? ' (serves first)' : ''), num => {
       const lu = lineups[String(match.setNumber)];
       const at = lu[side].indexOf(num);
@@ -1372,6 +1442,7 @@
         openPlayersFor(side, 'Sub · who goes OUT for #' + (inNum || '?') + '?', (outNum, outName) => {
           if (lu && outNum && lu[side].indexOf(outNum) >= 0) { lu[side][lu[side].indexOf(outNum)] = inNum; saveLineups(); }
           const nameOf = (num, nm) => nm || ((rosterFor(side).find(p => p.num === num) || {}).name || '');
+          record('SUB', side, { number: inNum || '', player: nameOf(inNum, inName), out: outNum || '', outName: nameOf(outNum, outName) });
           queuePlay('SUB', side, inNum, short(nameOf(inNum, inName)), { out: outNum || '', outName: short(nameOf(outNum, outName)) },
             'Sub #' + (inNum || '?') + ' for #' + (outNum || '?'));
         }, onCourt);
@@ -1463,8 +1534,37 @@
 
   function sendBanner(b) { bannerToSend = b; queueSave(); }
 
+  /** The match stats (box score, sets, play-by-play) from this match's part of the log. */
+  function matchBox() {
+    const numbers = [];
+    ['home', 'away'].forEach(side => {
+      const prefix = (style[side + 'Logo'] || side) + '|' + (style.division || 'men') + '|';
+      Object.keys(todayNums).forEach(k => { if (k.indexOf(prefix) === 0) numbers.push({ side, name: todayNums[k].name, number: todayNums[k].number }); });
+    });
+    return RobinsBox.compute(RobinsBox.matchEvents(events), match, {
+      court, division: { men: 'Men', women: 'Women', coed: 'Co-Ed' }[style.division || 'men'],
+      nameOf: (side, num) => ((rosterFor(side).find(p => p.num === num) || {}).name || ''),
+      lineups, numbers });
+  }
+  function localDate() { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); }
+  function fileBase() { return (match ? (match.homeName + '-vs-' + match.awayName).replace(/[^A-Za-z0-9-]+/g, '') : 'match') + '-' + localDate(); }
+  function downloadBlob(blob, name) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  }
+  function downloadStats(kind) {
+    if (!match) { toast('Set up the match first'); return; }
+    const box = matchBox();
+    if (kind === 'xlsx') downloadBlob(RobinsXlsx.build(RobinsBox.sheets(box)), 'match-stats-court' + court + '-' + fileBase() + '.xlsx');
+    else downloadBlob(new Blob([RobinsBox.csv(box)], { type: 'text/csv' }), 'box-score-court' + court + '-' + fileBase() + '.csv');
+  }
+
   function downloadCsv() {
-    const cols = ['time', 'type', 'side', 'kind', 'number', 'player', 'undone', 'set', 'home', 'away', 'setsHome', 'setsAway', 'serving', 'homeName', 'awayName'];
+    const cols = ['time', 'type', 'side', 'kind', 'number', 'player', 'undone', 'set', 'home', 'away', 'setsHome', 'setsAway', 'serving',
+      'serverSide', 'server', 'serverName', 'out', 'outName', 'homeName', 'awayName'];
     const q = v => { const s = String(v == null ? '' : v); return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
     const csv = [cols.join(',')].concat(events.map(e => cols.map(c => q(e[c])).join(','))).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
@@ -1527,6 +1627,16 @@
         break;
       }
       case 'noplayer': picked('', ''); break;
+      case 'ghostslot': picked(GHOST, ''); break;
+      case 'ghostpoint': {
+        // Bylaws 4.2.2: the ghost player can't serve; the point and the serve go to the other team.
+        const g = currentServer();
+        if (!g || !g.ghost) break;
+        const other = M.other(g.side);
+        const index = commit(M.point(match, other), other, { serverSide: g.side, ghost: true });
+        if (index >= 0) { events[index].kind = 'GHOST'; saveEvents(); toast('Ghost serve · point to ' + M.name(match, other)); }
+        break;
+      }
       case 'rosterrefresh': $('rosterNote').textContent = 'Reloading…'; loadRosters(true); loadIntro(true); break;
       case 'showcard': showCard(); break;
       case 'hidecard': hideCard(); break;
@@ -1535,7 +1645,7 @@
       case 'lineupdone': show(null); queueSave(); toast(currentServer() ? 'Lineups saved · the video shows who serves' : 'Lineups saved'); break;
       case 'lineupcopy': {
         const prev = lineups[String(match.setNumber - 1)];
-        if (prev) { lineups[String(match.setNumber)] = { home: prev.home.slice(), away: prev.away.slice() }; saveLineups(); queueSave(); openLineups(); }
+        if (prev) { lineups[String(match.setNumber)] = JSON.parse(JSON.stringify(prev)); saveLineups(); queueSave(); openLineups(); }   // the six, the liberos and their slots
         break;
       }
       case 'lineupclear': delete lineups[String(match.setNumber)]; saveLineups(); queueSave(); openLineups(); break;
@@ -1563,6 +1673,8 @@
       }
       case 'clearbanner': sendBanner(null); show(null); toast('Message cleared'); break;
       case 'csv': downloadCsv(); break;
+      case 'xlsx': downloadStats('xlsx'); break;
+      case 'boxcsv': downloadStats('csv'); break;
       case 'copyoverlay':
         (navigator.clipboard ? navigator.clipboard.writeText(overlayLink()) : Promise.reject())
           .then(() => toast('Overlay link copied'), () => toast('Press and hold the link to copy it'));
