@@ -130,8 +130,9 @@
     if (!img) { img = new Image(); img.onload = function () { kick(); }; img.src = url; images[url] = img; }
     return img.complete && img.naturalWidth ? img : null;
   }
+  let eventLogos = {};       // event id → data URL, from the Events tab (the match intro)
   const renderer = B.Renderer({
-    logo: id => imageFor(T.logoUrl(id)),
+    logo: id => (String(id || '').indexOf('event:') === 0 ? imageFor(eventLogos[String(id).slice(6)]) : imageFor(T.logoUrl(id))),
     sponsor: i => { const sp = sponsors[i]; return sp ? { name: sp.name, image: sp.logo ? imageFor(sp.logo) : null } : null; },
   });
   let lastFrame = null, frameNo = 0, loopTimer = 0, lastDraw = 0;
@@ -545,6 +546,20 @@
     setTimeout(loadSponsors, wait);
   }
 
+  /** Tournament logos for the match intro, when following starts and every 10 minutes (service version 5). */
+  async function loadEventLogos() {
+    let wait = 600000;
+    try {
+      const r = await A.getIntro(court);
+      if (r && r.ok && Array.isArray(r.events)) {
+        const next = {};
+        r.events.forEach(e => { if (e && e.id && /^data:image\/(png|jpeg|webp|gif);base64,/.test(e.logo || '')) next[String(e.id)] = e.logo; });
+        eventLogos = next;
+      }
+    } catch (e) { wait = 60000; }
+    setTimeout(loadEventLogos, wait);
+  }
+
   let lastOk = 0;
   async function poll() {
     try {
@@ -560,15 +575,22 @@
 
   function demoBoard() {
     let s = M.newMatch('Robins', 'MacDill', M.DEFAULT_FORMAT, 'home');
-    for (let i = 0; i < 25; i++) s = M.point(s, 'home').state;
-    for (let i = 0; i < 18; i++) s = M.point(s, i % 3 ? 'away' : 'home').state;
-    for (let i = 0; i < 4; i++) s = M.point(s, 'home').state;
+    if (!params.has('intro')) {   // the intro demo starts at 0–0
+      for (let i = 0; i < 25; i++) s = M.point(s, 'home').state;
+      for (let i = 0; i < 18; i++) s = M.point(s, i % 3 ? 'away' : 'home').state;
+      for (let i = 0; i < 4; i++) s = M.point(s, 'home').state;
+    }
     const now = Date.now();
     const cardType = params.get('card');
     return { ok: true, now, board: { version: 1, match: s,
       style: { corner: params.get('corner') || 'tl', scale: Number(params.get('scale')) || 1, show: true, homeColor: '#BE121C', awayColor: '#1E8C88',
         homeLogo: 'team-robins', awayLogo: params.get('away') || 'team-macdill', badge: params.get('badge') || 'league-ava', eventTitle: 'Gulf Regionals', division: 'men',
-        layout: params.get('layout') === 'box' ? 'box' : 'bar' },
+        layout: params.get('layout') === 'box' ? 'box' : 'bar',
+        intro: params.has('intro') ? { event: 'Gulf Region Invitational', sub: 'Warner Robins Showcase', round: 'Pool play', eventId: '',
+          dates: 'Jan 16\u201317, 2027', place: 'North Houston Sports Complex \u00b7 Warner Robins, GA',
+          home: { seed: 'Gulf Region \u00b7 #3 seed', last: 'Last out: Emerald Coast, T-9th of 17', rank: '#15 in the league \u00b7 9 pts' },
+          away: { seed: 'Gulf Region \u00b7 #1 seed', last: 'Last out: Emerald Coast, 3rd of 17', rank: '#4 in the league \u00b7 14 pts' },
+          notes: params.get('intro') === 'notes' ? ['Last meeting: Emerald Coast, MacDill won 2\u20130', 'Robins are 6\u20132 at home this season'] : [] } : undefined },
       banner: params.has('banner') ? { title: 'Robins win set 1', subtitle: 'Robins 25 – 6 MacDill', seconds: 0, at: now } : null,
       card: cardType ? { type: cardType, title: '', message: params.get('msg') || '', seconds: Number(params.get('sec') || 0), at: now } : null,
       play: null } };
@@ -614,6 +636,7 @@
     } else {
       poll();
       loadSponsors();
+      loadEventLogos();
     }
     // Banners that run out need a redraw even when nothing new arrives.
     setInterval(function () { if (bannerUntil > 0 && Date.now() >= bannerUntil && board && board.banner) { bannerUntil = -1; render(); } }, 500);

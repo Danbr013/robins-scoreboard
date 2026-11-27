@@ -61,18 +61,23 @@
   }
 
   /** The court's sponsors for the video (service version 4): { ok, sponsors: [{ name, logo: data URL or '' }] }. */
-  async function getSponsors(courtId, timeoutMs) {
+  /** A public read of the service: op 'sponsors' (the Sponsors tab) or 'intro' (events, standings, finishes). */
+  async function getPublic(op, courtId, timeoutMs, refresh) {
     const url = backend();
     if (!url) throw new Error('not-configured');
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), timeoutMs || 20000);
     try {
       const sep = url.includes('?') ? '&' : '?';
-      const r = await fetch(url + sep + 'court=' + encodeURIComponent(courtId) + '&op=sponsors&t=' + Date.now(), { cache: 'no-store', signal: ctrl.signal });
+      const r = await fetch(url + sep + 'court=' + encodeURIComponent(courtId) + '&op=' + op + (refresh ? '&refresh=1' : '') + '&t=' + Date.now(),
+        { cache: 'no-store', signal: ctrl.signal });
       if (!r.ok) throw new Error('http-' + r.status);
       return await r.json();
     } finally { clearTimeout(timer); }
   }
+  const getSponsors = (courtId, timeoutMs) => getPublic('sponsors', courtId, timeoutMs);
+  /** What the match intro can show (service version 5; older services answer with a board, which has no events). */
+  const getIntro = (courtId, timeoutMs, refresh) => getPublic('intro', courtId, timeoutMs, refresh);
 
   async function post(body, timeoutMs) {
     const url = backend();
@@ -93,5 +98,5 @@
     return null;
   }
 
-  root.RobinsApi = { backend, court, getBoard, getSponsors, post, store, teamService, serviceTag, link, APPS_SCRIPT };
+  root.RobinsApi = { backend, court, getBoard, getSponsors, getIntro, post, store, teamService, serviceTag, link, APPS_SCRIPT };
 })(window);

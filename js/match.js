@@ -73,6 +73,32 @@
     return s;
   }
 
+  /**
+   * The format in words for the match intro: main = the sets and targets ("Best of 3", "Sets 1–2 to 25",
+   * "Set 3 to 15"), rules = how a set ends, timeouts and "Rally scoring".
+   */
+  function formatWords(format) {
+    const f = normFormat(format);
+    const deciding = f.maxSets > 1 && f.maxSets % 2 === 1 && f.decidingSetPoints !== f.pointsPerSet;
+    const main = [];
+    if (f.maxSets === 1) main.push('1 set to ' + f.pointsPerSet);
+    else {
+      main.push(f.playAllSets ? f.maxSets + (f.maxSets === 2 ? ' sets, both played' : ' sets, all played') : 'Best of ' + f.maxSets);
+      if (deciding) {
+        main.push((f.maxSets === 3 ? 'Sets 1\u20132' : 'Sets 1\u2013' + (f.maxSets - 1)) + ' to ' + f.pointsPerSet);
+        main.push('Set ' + f.maxSets + ' to ' + f.decidingSetPoints);
+      } else main.push('Sets to ' + f.pointsPerSet);
+    }
+    const rules = [];
+    if (f.capOver > 0) rules.push('Cap at ' + (f.pointsPerSet + f.capOver) + (deciding ? ' (' + (f.decidingSetPoints + f.capOver) + ' in set ' + f.maxSets + ')' : ''));
+    else if (f.pointCap > 0) rules.push('Cap at ' + f.pointCap);
+    else rules.push('Win by ' + f.winBy);
+    const to = timeoutLimit(f);
+    if (to > 0) rules.push(to + (to === 1 ? ' timeout' : ' timeouts') + ' a set');
+    rules.push('Rally scoring');
+    return { main, rules };
+  }
+
   function sameFormat(a, b) {
     const x = normFormat(a), y = normFormat(b);
     return CORE_KEYS.concat(['capOver', 'timeoutsPerSet']).every(k => x[k] === y[k]);
@@ -259,7 +285,7 @@
 
   const api = {
     PRESETS, CAP_CHOICES, TIMEOUT_CHOICES, isValid, DEFAULT_FORMAT, normFormat, presetFor, capFor, timeoutLimit, timeoutsLeft,
-    other, setsToWin, targetFor, isSetWon, formatLabel, sameFormat,
+    other, setsToWin, targetFor, isSetWon, formatLabel, formatWords, sameFormat,
     newMatch, point, removePoint, setServing, timeout, rename,
     points, name, timeouts, setsWon, situation, matchWinner, bannerFor, textOn, luminance, lastName,
   };

@@ -397,6 +397,7 @@
 
     function drawPanel(s, st, shown, layout, countdown) {
       const m = shown.moment;
+      if (m.kind === 'INTRO') { introSequence(s, st, shown, layout); return; }
       const open = Math.min(easeOut(shown.t / 0.4), easeOut((shown.length - shown.t) / 0.45));
       if (open <= 0 || !PANEL_SIZES[m.kind]) return;
       const w = PANEL_SIZES[m.kind][0];
@@ -410,7 +411,6 @@
       else if (m.kind === 'SET_STATS') setStats(s, st, x, y, w, h, m);
       else if (m.kind === 'SET_START') setStart(x, y, w, h, m);
       else if (m.kind === 'TIMEOUT') timeout(s, st, x, y, w, h, m, countdown, shown.t);
-      else if (m.kind === 'INTRO') intro(s, st, x, y, w, h);
       else if (m.kind === 'POTM') potm(s, st, x, y, w, h, m);
       else if (m.kind === 'SPONSOR') sponsorPanel(x, y, w, h, m);
       c.restore();
@@ -571,27 +571,248 @@
       else { const nm = sp.name.toUpperCase(); const size = fitText(nm, 32, x + w - 30 - lx, 'd'); font('d', size); text(nm, lx, baseline(y, h - 6) + 1, 'd', size, BLACK); }
     }
 
-    function intro(s, st, x, y, w, h) {
+    // ---------------------------------------------------------------- the match open (More → Match intro)
+    /*
+     * Up to 45 s, or until the first point: the tournament (its logo or the badge, name, dates and place), the
+     * matchup (logos, names, seeds, starting six, the venue), the season so far and storylines (when the scorer
+     * page has them), the format, then the matchup again until play starts. style.intro comes from the scorer
+     * page; without it the open is the matchup with the event title, as before.
+     */
+    const DIVS = { men: "MEN'S", women: "WOMEN'S", coed: 'CO-ED' };
+    const backOut = x => { const k = clamp(x, 0, 1) - 1, c1 = 1.70158; return 1 + (c1 + 1) * k * k * k + c1 * k * k; };
+    const upper = v => String(v || '').trim().toUpperCase();
+
+    function introOf(st) {
+      const it = st.intro && typeof st.intro === 'object' ? st.intro : {};
+      const side = v => (v && typeof v === 'object' ? v : {});
+      return { event: upper(it.event || st.eventTitle), sub: upper(it.sub), round: upper(it.round), place: upper(it.place),
+        dates: upper(it.dates), eventId: String(it.eventId || ''), home: side(it.home), away: side(it.away),
+        notes: (Array.isArray(it.notes) ? it.notes : []).map(n => String(n || '').trim()).filter(Boolean).slice(0, 3) };
+    }
+    const seasonRows = it => ['home', 'away'].map(side => [it[side].last, it[side].rank].map(upper).filter(Boolean));
+    function introStages(it) {
+      const stages = [];
+      if (it.event) stages.push(['reveal', 5.6]);
+      stages.push(['matchup', 10]);
+      if (it.notes.length || seasonRows(it).some(r => r.length)) stages.push(['season', 8.5]);
+      stages.push(['format', 6.5]);
+      stages.push(['matchup', 999]);
+      return stages;
+    }
+
+    function introSequence(s, st, shown, layout) {
+      const it = introOf(st);
+      const stages = introStages(it);
+      let from = 0;
+      for (let i = 0; i < stages.length; i++) {
+        const end = i === stages.length - 1 ? shown.length : Math.min(from + stages[i][1], shown.length);
+        if (shown.t < end || i === stages.length - 1) {
+          const t = shown.t - from, len = end - from;
+          if (stages[i][0] === 'reveal') reveal(st, it, t, len);
+          else introPanel(stages[i][0], s, st, it, t, len, layout);
+          return;
+        }
+        from = end;
+      }
+    }
+
+    function introPanel(kind, s, st, it, t, len, layout) {
+      const open = Math.min(easeOut(t / 0.45), easeOut((len - t) / 0.4));
+      if (open <= 0) return;
+      const rows = seasonRows(it), cols = rows.some(r => r.length);
+      const size = kind === 'matchup' ? [1060, it.place ? 346 : 312]
+        : kind === 'season' ? [940, 44 + (cols ? 112 : 0) + (it.notes.length ? 14 + 32 * it.notes.length : 0) + 14]
+        : [960, 100];
+      const w = size[0], h = size[1];
+      const bottom = layout === 'bar' ? BAR_Y - 12 : H - 60;
+      const x = CENTER_X - w / 2, y = bottom - h;
+      c.save();
+      clip(x - 4, bottom - (h + 8) * open, w + 8, (h + 8) * open + 4);
+      if (kind === 'matchup') matchup(s, st, it, x, y, w, h, t);
+      else if (kind === 'season') season(s, st, it, rows, cols, x, y, w, h, t);
+      else formatCard(s, x, y, w, h, t);
+      c.restore();
+    }
+
+    /** A line of differently coloured parts, centred and shrunk to fit. */
+    function twoTone(parts, face, size, cx, top, height, maxW) {
+      parts = parts.filter(p => p[0]);
+      if (!parts.length) return;
+      const sep = '  ·  ';
+      const all = parts.map(p => p[0]).join(sep);
+      const sz = fitText(all, size, maxW, face);
+      font(face, sz);
+      let x = cx - measure(all) / 2;
+      const y = baseline(top, height) + 1;
+      parts.forEach((p, i) => {
+        if (i) { text(sep, x, y, face, sz, 'rgba(250,246,237,.55)'); x += measure(sep); }
+        text(p[0], x, y, face, sz, p[1]);
+        x += measure(p[0]);
+      });
+    }
+
+    function reveal(st, it, t, len) {
+      const vis = Math.min(easeOut(t / 0.5), easeOut((len - t) / 0.7));
+      if (vis <= 0) return;
+      const leaving = 1 - easeOut((len - t) / 0.7);
+      const cx = CENTER_X, cy = 252, R = 116;
+      c.save();
+      // Dim the picture behind the emblem, fading out above the score bar so the bar stays as bright as ever.
+      c.globalAlpha = vis;
+      fillRect(0, 0, W, BAR_Y, grad(0, 0, 0, BAR_Y, ['rgba(8,8,10,.5)', 'rgba(8,8,10,.5)', 'rgba(8,8,10,.42)', 'rgba(8,8,10,0)']));
+      const glow = c.createRadialGradient(cx, cy, 10, cx, cy, 300);
+      glow.addColorStop(0, rgba(RED, 0.6)); glow.addColorStop(1, rgba(RED, 0));
+      c.fillStyle = glow; c.fillRect(cx - 300, cy - 300, 600, 600);
+
+      // The emblem: the tournament's logo, or the badge (AVA or the region) in a gold ring.
+      const k = (0.5 + 0.5 * backOut((t - 0.05) / 0.75)) * (1 + 0.08 * leaving);
+      c.save();
+      c.translate(cx, cy); c.scale(k, k);
+      c.globalAlpha = vis * clamp(t / 0.3, 0, 1);
+      const eventImg = it.eventId ? logo('event:' + it.eventId) : null;
+      const badge = logo(st.badge) || logo(st.homeLogo);
+      if (eventImg) fit(eventImg, -170, -120, 340, 240);
+      else {
+        circle(0, 0, R, PANEL);
+        c.lineWidth = 7; c.strokeStyle = GOLD; c.lineCap = 'round';
+        c.beginPath(); c.arc(0, 0, R - 4, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * easeInOut((t - 0.1) / 0.9)); c.stroke();
+        if (badge) fit(badge, -78, -78, 156, 156);
+        else centered('AVA', 'd', 80, CREAM, 0, -50, 100, 180);
+      }
+      // A light sweep across the emblem.
+      const sweep = (t - 1.1) / 0.8;
+      if (sweep > 0 && sweep < 1) {
+        c.beginPath(); c.arc(0, 0, eventImg ? 170 : R, 0, Math.PI * 2); c.clip();
+        const sx = -260 + 520 * sweep;
+        const g = c.createLinearGradient(sx - 60, 0, sx + 60, 0);
+        g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(0.5, 'rgba(255,255,255,.38)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+        c.fillStyle = g; c.transform(1, 0, -0.35, 1, 0, 0); c.fillRect(sx - 60, -260, 120, 520);
+      }
+      c.restore();
+
+      // The name, a red rule, the subtitle, dates and place.
+      const rise = v => (1 - easeOut(v)) * 24;
+      const a1 = clamp((t - 0.45) / 0.4, 0, 1);
+      const nameSize = fitText(it.event, 78, 1100, 'd');
+      spacing(0.02, nameSize);
+      text(it.event, cx, 436 + rise((t - 0.45) / 0.5), 'd', nameSize, CREAM, 'center', a1);
+      spacing(0, nameSize);
+      const ruleW = 600 * easeInOut((t - 0.75) / 0.6);
+      if (ruleW > 0) fillRect(cx - ruleW / 2, 452, ruleW, 4, RED);
+      if (it.sub) {
+        const size = fitText(it.sub, 30, 1000, 'c');
+        spacing(0.06, size);
+        text(it.sub, cx, 492 + rise((t - 0.9) / 0.5), 'c', size, GOLD, 'center', clamp((t - 0.9) / 0.4, 0, 1));
+      }
+      const line = [it.dates, it.place].filter(Boolean).join('  ·  ');
+      if (line) {
+        const size = fitText(line, 21, 1000, 'c');
+        spacing(0.08, size);
+        text(line, cx, (it.sub ? 528 : 496) + rise((t - 1.1) / 0.5), 'c', size, 'rgba(250,246,237,.9)', 'center', clamp((t - 1.1) / 0.4, 0, 1));
+      }
+      spacing(0, 20);
+      c.restore();
+    }
+
+    function matchup(s, st, it, x, y, w, h, t) {
+      c.save();
+      rr(x, y, w, h, 12); c.clip();
       darkPanel(x, y, w, h);
-      fillRect(x, y, w, 6, RED);
-      const div = { men: "MEN'S", women: "WOMEN'S", coed: 'CO-ED' }[st.division] || '';
-      const head = [(st.eventTitle || '').toUpperCase(), div].filter(v => v.trim()).join('  ·  ') || "TODAY'S MATCH";
-      centered(head, 'd', 32, GOLD, x + w / 2, y + 12, 40, w - 60);
-      centered('VS', 'd', 64, CREAM, x + w / 2, y + 70, 150, 120);
+      fillRect(x, y, w, 44, hgrad(x, x + w, [darker(RED, 0.62), RED, darker(RED, 0.62)]));
+      twoTone([[it.event || "TODAY'S MATCH", CREAM], [it.round, GOLD]], 'd', 31, x + w / 2, y + 1, 43, w - 60);
       const ex = lastExtras || D.extrasFrom(null);
+      const vsA = clamp((t - 0.2) / 0.4, 0, 1);
+      centered('VS', 'd', 64, rgba(CREAM, vsA), x + w / 2, y + 96, 90, 120);
+      const div = DIVS[st.division];
+      if (div) { c.globalAlpha = vsA; centered(div, 'c', 18, GOLD, x + w / 2, y + 176, 24, 160); c.globalAlpha = 1; }
       ['home', 'away'].forEach(side => {
-        const cx = side === 'home' ? x + w * 0.26 : x + w * 0.74;
+        const slide = (1 - easeOut((t - 0.1) / 0.55)) * (side === 'home' ? -60 : 60);
+        const cx = (side === 'home' ? x + w * 0.26 : x + w * 0.74) + slide;
         const color = teamColor(st, side);
-        const px = cx - 70, py = y + 62, pw = 140, ph = 140;
+        c.globalAlpha = clamp((t - 0.05) / 0.4, 0, 1);
+        const px = cx - 70, py = y + 60, pw = 140, ph = 140;
         fillRR(px, py, pw, ph, 14, CREAM);
         fillRect(px, py + ph - 8, pw, 8, color);
         const img = teamLogo(st, side);
         if (img) fit(img, px + 10, py + 10, pw - 20, ph - 26);
         else centered(M.name(s, side).slice(0, 1), 'd', 90, color, cx, py, ph - 8, pw);
-        centered(M.name(s, side).toUpperCase(), 'd', 44, CREAM, cx, py + ph + 4, 46, w * 0.42);
+        centered(M.name(s, side).toUpperCase(), 'd', 44, CREAM, cx, py + ph + 4, 46, w * 0.40);
+        c.globalAlpha = clamp((t - 0.5) / 0.4, 0, 1);
+        const seed = upper(it[side].seed);
+        if (seed) { spacing(0.05, 19); centered(seed, 'c', 19, GOLD, cx, py + ph + 50, 24, w * 0.42); spacing(0, 19); }
         const lu = ex.lineup[side] || [];
-        if (lu.length) centered('STARTING  ' + lu.join('  ·  '), 'c', 19, 'rgba(250,246,237,.86)', cx, py + ph + 48, 26, w * 0.44);
+        if (lu.length) centered('STARTING  ' + lu.join('  ·  '), 'c', 18, 'rgba(250,246,237,.86)', cx, py + ph + (seed ? 76 : 52), 24, w * 0.44);
+        c.globalAlpha = 1;
       });
+      if (it.place) {
+        fillRect(x, y + h - 34, w, 34, CREAM);
+        spacing(0.06, 19);
+        centered(it.place, 'c', 19, BLACK, x + w / 2, y + h - 34, 34, w - 40);
+        spacing(0, 19);
+      }
+      c.restore();
+    }
+
+    function season(s, st, it, rows, cols, x, y, w, h, t) {
+      c.save();
+      rr(x, y, w, h, 12); c.clip();
+      darkPanel(x, y, w, h);
+      fillRect(x, y, w, 44, hgrad(x, x + w, [darker(RED, 0.62), RED, darker(RED, 0.62)]));
+      spacing(0.04, 30);
+      centered(cols ? 'SEASON SO FAR' : 'STORYLINE', 'd', 30, CREAM, x + w / 2, y + 1, 43, w - 60);
+      spacing(0, 30);
+      let top = y + 44;
+      if (cols) {
+        fillRect(x + w / 2 - 1, top + 16, 2, 80, 'rgba(250,246,237,.18)');
+        ['home', 'away'].forEach((side, i) => {
+          c.globalAlpha = clamp((t - 0.2 - i * 0.15) / 0.4, 0, 1);
+          const cx0 = x + 24 + i * (w / 2);
+          const color = teamColor(st, side);
+          fillRR(cx0, top + 18, 64, 64, 10, CREAM);
+          fillRect(cx0, top + 78, 64, 4, color);
+          const img = teamLogo(st, side);
+          if (img) fit(img, cx0 + 6, top + 22, 52, 52);
+          else centered(M.name(s, side).slice(0, 1), 'd', 44, color, cx0 + 32, top + 18, 60, 60);
+          const tx = cx0 + 82, maxW = w / 2 - 120;
+          const ns = fitText(M.name(s, side).toUpperCase(), 32, maxW, 'd');
+          text(M.name(s, side).toUpperCase(), tx, top + 46, 'd', ns, CREAM);
+          rows[i].forEach((line, j) => {
+            const ls = fitText(line, 19, maxW, 'c');
+            text(line, tx, top + 72 + j * 24, 'c', ls, j ? 'rgba(250,246,237,.86)' : GOLD);
+          });
+          c.globalAlpha = 1;
+        });
+        top += 112;
+      }
+      it.notes.forEach((note, i) => {
+        c.globalAlpha = clamp((t - 0.5 - i * 0.25) / 0.4, 0, 1);
+        fillRect(x + 26, top + 14 + i * 32 + 9, 8, 8, GOLD);
+        const ls = fitText(note, 22, w - 80, 'c');
+        text(note, x + 46, top + 14 + i * 32 + 20, 'c', ls, CREAM);
+        c.globalAlpha = 1;
+      });
+      c.restore();
+    }
+
+    function formatCard(s, x, y, w, h, t) {
+      const words = M.formatWords(s.format);
+      c.save();
+      rr(x, y, w, h, 12); c.clip();
+      darkPanel(x, y, w, h);
+      fillRect(x, y, 180, h, GOLD);
+      centered('FORMAT', 'd', 40, BLACK, x + 90, y, h, 160);
+      c.globalAlpha = clamp((t - 0.2) / 0.4, 0, 1);
+      const main = words.main.join('  ·  ').toUpperCase();
+      const ms = fitText(main, 40, w - 230, 'd');
+      text(main, x + 206, y + 50, 'd', ms, CREAM);
+      c.globalAlpha = clamp((t - 0.45) / 0.4, 0, 1);
+      const rules = words.rules.join('  ·  ').toUpperCase();
+      spacing(0.05, 20);
+      const rs = fitText(rules, 20, w - 230, 'c');
+      text(rules, x + 206, y + 80, 'c', rs, GOLD);
+      spacing(0, 20);
+      c.globalAlpha = 1;
+      c.restore();
     }
 
     function potm(s, st, x, y, w, h, m) {

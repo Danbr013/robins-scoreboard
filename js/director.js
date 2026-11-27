@@ -12,11 +12,13 @@
 
   // kind: [slot, seconds, maxWaitSeconds, priority]. A timeout comes after the plays already waiting, lasts until
   // 30 s after the call (no longest wait) and steps aside for a play or sub that arrives while it is up.
+  // The match open (tournament, matchup, season, format) runs up to 45 s, or until the first point.
+  const INTRO_MS = 45000;
   const KINDS = {
     RUN: ['B', 4, 0, 9], TIED: ['B', 3, 0, 9], CORRECTED: ['B', 3, 0, 9],
     PLAY: ['A', 5, 30, 1], MILESTONE: ['A', 5, 35, 1], SERVER: ['A', 4.5, 9, 5], SUB: ['A', 4.5, 20, 2],
     SET_WON: ['C', 7, 30, 0], MATCH_WON: ['C', 20, 60, 0], SET_STATS: ['C', 12, 60, 4], SET_START: ['C', 6, 180, 7],
-    TIMEOUT: ['C', 30, 0, 3], INTRO: ['C', 30, 0, 0], POTM: ['C', 15, 60, 4], SPONSOR: ['C', 7, 45, 6],
+    TIMEOUT: ['C', 30, 0, 3], INTRO: ['C', 45, 0, 0], POTM: ['C', 15, 60, 4], SPONSOR: ['C', 7, 45, 6],
   };
   const OVER_TIMEOUT = ['PLAY', 'MILESTONE', 'SUB'];
   /** Plays still go on after a break card up to this long; after a longer break they're old news. */
@@ -213,8 +215,8 @@
       if (active) {
         const a = active;
         const end = a.kind === 'TIMEOUT' ? a.until : a.startedAt + a.seconds * 1000;
-        if (now >= end && !(a.kind === 'INTRO' && introUp && now - a.startedAt < 30000)) active = null;
-        if (a.kind === 'INTRO' && now - a.startedAt >= 30000) active = null;
+        if (now >= end && !(a.kind === 'INTRO' && introUp && now - a.startedAt < INTRO_MS)) active = null;
+        if (a.kind === 'INTRO' && now - a.startedAt >= INTRO_MS) active = null;
       }
       // A play or sub that arrives during the timeout panel goes on now; the timeout comes back after it.
       if (active && active.kind === 'TIMEOUT' && !paused && active.until - now > 3000 &&
@@ -235,7 +237,7 @@
       tags = tags.filter(t => now - t.startedAt <= t.seconds * 1000);
       const a = active;
       const shown = a ? { moment: a, kind: a.kind, t: (now - a.startedAt) / 1000,
-        length: a.kind === 'TIMEOUT' ? (a.until - a.startedAt) / 1000 : a.kind === 'INTRO' ? 30 : a.seconds } : null;
+        length: a.kind === 'TIMEOUT' ? (a.until - a.startedAt) / 1000 : a.kind === 'INTRO' ? INTRO_MS / 1000 : a.seconds } : null;
       const s = last;
       const sit = s ? M.situation(s) : null;
       const key = sit ? s.setNumber + '-' + sit.side + '-' + sit.kind : null;

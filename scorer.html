@@ -232,6 +232,15 @@
   <div class="note">Corner badge</div>
   <div class="chips" id="badgeChips" style="margin:6px 0 12px"></div>
   <label class="field">Event title (shown until set 1 ends)<input type="text" id="eventIn" maxlength="40" placeholder="e.g. Gulf Regionals" autocomplete="off"></label>
+  <h3>Match intro</h3>
+  <div class="note">Tournament (from your sheet's Events tab)</div>
+  <div class="chips" id="introEventChips" style="margin:6px 0 12px"></div>
+  <div class="note">Round</div>
+  <div class="chips" id="roundChips" style="margin:6px 0 8px"></div>
+  <label class="field">Or type the round<input type="text" id="roundIn" maxlength="30" placeholder="e.g. Gold bracket semifinal" autocomplete="off"></label>
+  <label class="field">Storyline (optional)<input type="text" id="note1In" maxlength="70" placeholder="e.g. Last meeting: Emerald Coast, MacDill won 2–0" autocomplete="off"></label>
+  <label class="field">Second storyline (optional)<input type="text" id="note2In" maxlength="70" placeholder="e.g. Robins are 6–2 at home this season" autocomplete="off"></label>
+  <div class="note" id="introNote"></div>
   <div class="stack" style="margin-top:18px">
     <button class="big gold" data-act="apply">Save changes · keep the score</button>
     <button class="big primary" data-act="newmatch">Start a new match (0–0)</button>
@@ -273,7 +282,7 @@
     <button class="big" data-act="sponsor">Show sponsor</button>
     <button class="big" data-act="dig">Dig (no point)</button>
   </div>
-  <p class="note">The match intro shows both teams and their starting six until the first point. Sponsors come from the Sponsors tab of your sheet.</p>
+  <p class="note">The match intro opens with the tournament, then both teams with their starting six, the season so far, the format, and the teams again until the first point. Pick the tournament and round in Match setup. Sponsors come from the Sponsors tab of your sheet.</p>
   <h3>Break screen</h3>
   <div class="chips" id="cardTypeChips" style="margin-bottom:10px"></div>
   <div class="note">Countdown</div>
@@ -785,6 +794,7 @@
     draft.timeouts = M.timeoutLimit(draft.format);
     fillSetup();
     show('setup');
+    if (!introData) loadIntro(false);
   }
 
   function teamCard(side) {
@@ -862,6 +872,109 @@
     T.regions().forEach(r => badges.push({ label: r.name.replace(/ Region$/, ''), value: r.id, img: T.logoUrl(r.id) }));
     chips('badgeChips', badges, draft.badge || null, v => { draft.badge = v; fillSetup(); });
     $('eventIn').value = draft.eventTitle || '';
+    fillIntro();
+  }
+
+  // ---------------------------------------------------------------- match intro (tournament, round, storylines)
+  const ROUNDS = ['Pool play', 'Play-in', 'Quarterfinal', 'Semifinal', 'Final', 'Gold bracket', 'Silver bracket', 'Exhibition'];
+  let introData = null;        // { events, standings, finishes } from the service (version 5)
+
+  async function loadIntro(refresh) {
+    try {
+      const r = await A.getIntro(court, 20000, refresh);
+      if (r && r.ok && Array.isArray(r.events)) introData = r;
+    } catch (e) { /* the intro works without it */ }
+    if (draft && !$('setup').classList.contains('hidden')) { readSetupFields(); fillIntro(); }
+  }
+
+  /** Events nearest today first (upcoming, then the most recent), at most 8. */
+  function introEvents() {
+    const today = Date.now() - 36e5 * 30;
+    const when = e => { const t = Date.parse(String(e.end || e.start || '').replace(/^[A-Za-z]{3}\s+/, '')); return isNaN(t) ? 0 : t; };
+    const list = ((introData && introData.events) || []).slice();
+    list.sort((a, b) => { const x = when(a), y = when(b); const fx = x >= today, fy = y >= today;
+      return fx !== fy ? (fx ? -1 : 1) : fx ? x - y : y - x; });
+    return list.slice(0, 8);
+  }
+
+  function fillIntro() {
+    const events = introEvents();
+    const chosen = draft.introEvent || '';
+    const items = [{ label: 'None', value: '' }].concat(events.map(e => ({ label: e.name, value: e.id })));
+    if (chosen && !events.some(e => e.id === chosen)) items.push({ label: draft.introEventName || chosen, value: chosen });
+    chips('introEventChips', items, chosen, v => {
+      draft.introEvent = v;
+      const e = events.find(x => x.id === v);
+      draft.introEventName = e ? e.name : '';
+      if (e && !String(draft.eventTitle || '').trim()) draft.eventTitle = e.name.slice(0, 40);
+      fillSetup();
+    });
+    const round = draft.introRound || '';
+    chips('roundChips', [{ label: 'None', value: '' }].concat(ROUNDS.map(r => ({ label: r, value: r }))), ROUNDS.indexOf(round) >= 0 || !round ? round : null,
+      v => { draft.introRound = v; $('roundIn').value = ''; fillIntro(); });
+    if (round && ROUNDS.indexOf(round) < 0 && document.activeElement !== $('roundIn')) $('roundIn').value = round;
+    const notes = draft.introNotes || [];
+    if (document.activeElement !== $('note1In')) $('note1In').value = notes[0] || '';
+    if (document.activeElement !== $('note2In')) $('note2In').value = notes[1] || '';
+    const it = composeIntro(draft);
+    const facts = ['home', 'away'].map(side => [it[side].seed, it[side].last].filter(Boolean).join(' · ')).filter(Boolean);
+    $('introNote').textContent = !introData ? 'Tournaments, standings and last finishes appear here once the live-score service is updated (version 5).'
+      : facts.length ? 'From the Team Hub: ' + facts.join(' | ') : 'No standings found for these teams; the intro shows the tournament, teams and format.';
+  }
+
+  function readIntroFields() {
+    const typed = $('roundIn').value.trim();
+    if (typed) draft.introRound = typed.slice(0, 30);
+    draft.introNotes = [$('note1In').value, $('note2In').value].map(v => v.trim().slice(0, 70)).filter(Boolean);
+  }
+
+  const keyOf = n => String(n || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  function placeWord(p) {
+    const m = /^(T-?)?(\d+)$/i.exec(String(p || '').trim());
+    if (!m) return String(p || '');
+    const n = Number(m[2]), suf = n % 100 >= 11 && n % 100 <= 13 ? 'th' : ['th', 'st', 'nd', 'rd'][n % 10] || 'th';
+    return (m[1] ? 'T-' : '') + n + suf;
+  }
+  function dateRange(start, end) {
+    const parse = v => { const m = /([A-Za-z]{3})[a-z]*\.?\s+(\d{1,2}),?\s+(\d{4})/.exec(String(v || '')); return m ? { mon: m[1], day: m[2], year: m[3] } : null; };
+    const a = parse(start), b = parse(end);
+    if (!a) return '';
+    if (!b || (b.mon === a.mon && b.day === a.day && b.year === a.year)) return a.mon + ' ' + a.day + ', ' + a.year;
+    if (b.mon === a.mon && b.year === a.year) return a.mon + ' ' + a.day + '\u2013' + b.day + ', ' + a.year;
+    return a.mon + ' ' + a.day + ' \u2013 ' + b.mon + ' ' + b.day + ', ' + b.year;
+  }
+
+  /**
+   * style.intro for the video: the tournament (Events tab), the round, each team's line under its name (region and
+   * seed at Regionals, region and league rank otherwise), its latest finish and points, and the storylines.
+   */
+  function composeIntro(d) {
+    const events = (introData && introData.events) || [];
+    const ev = events.find(e => e.id === d.introEvent) || null;
+    const regionals = !!ev && /regional/i.test((ev.type || '') + ' ' + ev.name);
+    const div = { men: 'men', women: 'women', coed: 'coed' }[d.division] || 'men';
+    const side = s => {
+      const t = T.find(d[s + 'Logo']);
+      const names = (t ? [t.name].concat(t.aliases || []) : []).concat([d[s + 'Name']]);
+      let st = null, fin = null;
+      names.forEach(n => {
+        const k = keyOf(n) + '|' + div;
+        if (!st && introData && introData.standings && introData.standings[k]) st = introData.standings[k];
+        if (!fin && introData && introData.finishes && introData.finishes[k]) fin = introData.finishes[k];
+      });
+      const out = {};
+      if (st) {
+        const region = st.region ? st.region + ' Region' : '';
+        const rank = st.rank ? '#' + st.rank + ' in the league' : '';
+        out.seed = [region, regionals && st.seed ? '#' + st.seed + ' seed' : rank].filter(Boolean).join(' \u00b7 ');
+        out.rank = [st.pts ? st.pts + ' season pts' : '', rank].filter(Boolean).join(' \u00b7 ');
+      }
+      if (fin && fin.event) out.last = 'Last out: ' + fin.event + ', ' + placeWord(fin.place) + (fin.of ? ' of ' + fin.of : '');
+      return out;
+    };
+    return { event: ev ? ev.name : '', sub: ev ? ev.sub || '' : '', eventId: ev ? ev.id : '', place: ev ? ev.place || '' : '',
+      dates: ev ? dateRange(ev.start, ev.end) : '', round: d.introRound || '', home: side('home'), away: side('away'),
+      notes: (d.introNotes || []).slice(0, 2) };
   }
 
   function fillCap() {
@@ -893,6 +1006,7 @@
     draft.format = Object.assign({}, M.PRESETS.find(p => p.id === $('formatIn').value).format,
       { capOver: draft.capOver || 0, timeoutsPerSet: draft.timeouts });
     draft.eventTitle = $('eventIn').value.trim();
+    readIntroFields();
   }
 
   function draftStyle() {
@@ -900,7 +1014,8 @@
       homeColor: draft.homeColor, awayColor: draft.awayColor, homeAccent: draft.homeAccent || '', awayAccent: draft.awayAccent || '',
       homeKit: draft.homeKit || null, awayKit: draft.awayKit || null, division: draft.division || 'men',
       homeLogo: draft.homeLogo || null, awayLogo: draft.awayLogo || null, badge: draft.badge || null, eventTitle: draft.eventTitle,
-      layout: draft.layout === 'box' ? 'box' : 'bar' };
+      layout: draft.layout === 'box' ? 'box' : 'bar', introEvent: draft.introEvent || '', introEventName: draft.introEventName || '',
+      introRound: draft.introRound || '', introNotes: (draft.introNotes || []).slice(0, 2), intro: composeIntro(draft) };
   }
 
   function applySetup(newMatch) {
@@ -1374,7 +1489,7 @@
         break;
       }
       case 'noplayer': picked('', ''); break;
-      case 'rosterrefresh': $('rosterNote').textContent = 'Reloading…'; loadRosters(true); break;
+      case 'rosterrefresh': $('rosterNote').textContent = 'Reloading…'; loadRosters(true); loadIntro(true); break;
       case 'showcard': showCard(); break;
       case 'hidecard': hideCard(); break;
       case 'close': pickCb = null; show(null); break;
@@ -1393,6 +1508,7 @@
       case 'intro':
         if (!match) { toast('Set up the match first'); break; }
         cardToSend = { type: 'intro', title: '', message: '', seconds: 0 };
+        style = Object.assign({}, style, { intro: composeIntro(style) });   // the latest standings
         render(); queueSave(); show(null);
         toast('Match intro on · it goes away on the first point (or More → Hide it)');
         break;
@@ -1439,6 +1555,7 @@
     if (!match && key) openSetup();
     render();
     loadRosters(false);
+    loadIntro(false);
     setTimeout(refresh, 5000);
   });
 })();
