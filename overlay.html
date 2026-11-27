@@ -616,7 +616,7 @@
       if (params.has('sponsors')) sponsors = [{ name: "Walk-On's Sports Bistreaux", logo: '' }, { name: 'CowPies Pizza Co.', logo: '' }];
       const first = demoBoard();
       if (params.get('lineup') !== '0') first.board.match.lineup = { home: ['10', '17', '3', '4', '5', '6'], away: ['12', '5', '21', '22', '23', '24'] };
-      first.board.match.stats = { home: { kills: 9, aces: 2, blocks: 3, digs: 11, players: { 10: { name: 'Tolliver', kills: 4, aces: 1 } } },
+      first.board.match.stats = { home: { kills: 9, aces: 2, blocks: 3, digs: 11, players: { 10: { name: 'Hargrove', kills: 4, aces: 1 } } },
         away: { kills: 6, aces: 1, blocks: 1, digs: 8, players: {} } };
       accept(first);
       status.textContent = 'Demo';
@@ -655,7 +655,7 @@
         if (what === 'setwon') { while (s.setNumber === board.match.setNumber && !s.matchOver) s = M.point(s, 'home').state; step(s); }
         const kind = (params.get('play') || '').toUpperCase();
         if (kind) {
-          const p = { kind, side: params.get('side') || 'home', number: params.get('num') || '10', name: params.get('name') || 'Tolliver',
+          const p = { kind, side: params.get('side') || 'home', number: params.get('num') || '10', name: params.get('name') || 'Hargrove',
             out: '3', outName: 'Lee', text: kind === 'POTM' ? '12 KILLS  ·  3 ACES' : '', at: Date.now() };
           if (layoutOf(styleOf(board)) === 'box' && boxPlay(kind)) playStat(p);
           director.event(p, Date.now()); kick();

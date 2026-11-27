@@ -252,7 +252,7 @@
     'da', 'das', 'do', 'dos', 'di', 'du', 'san', 'santa', 'st', 'st.', 'ste', 'saint', 'al', 'el', 'bin', 'ibn'];
 
   /**
-   * The surname for the video: "Julius “Buck” Tolliver" → "Tolliver", "Ana “Ani” Del Toro" → "Del Toro",
+   * The surname for the video: "Marcus “Moe” Hargrove" → "Hargrove", "Ana “Ani” Del Toro" → "Del Toro",
    * "Rosa De La Rosa" → "De La Rosa", "Juan Carlos Ortega Jr" → "Ortega". Double surnames with no particle
    * ("García Lorca") can't be told from a middle name, so rosters can give the surname outright (Last name on stream).
    * Film Room uses the same rule (scoring.stream_last). The app and the overlay show names as the scorer page sends them.
