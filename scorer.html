@@ -81,7 +81,12 @@
   #how { position: fixed; left: 10px; right: 10px; top: calc(env(safe-area-inset-top) + 44px); background: #101014; border: 1px solid #33333c;
     border-radius: 16px; padding: 10px; z-index: 15; box-shadow: 0 12px 32px rgba(0,0,0,.65); }
   #how .q { font-size: 16px; opacity: .85; margin: 0 4px 8px; }
-  #how .opts { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+  #how .opts { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+  .slots { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin: 6px 0 4px; }
+  .slot { border: 1px solid var(--line); background: var(--panel); border-radius: 10px; padding: 6px 2px; text-align: center; min-height: 62px; }
+  .slot small { display: block; font-size: 11px; opacity: .6; letter-spacing: .08em; }
+  .slot b { display: block; font-family: 'Bebas Neue', sans-serif; font-size: 30px; font-weight: 400; line-height: 1.05; }
+  .slot.serving { border-color: var(--gold); box-shadow: inset 0 0 0 1px var(--gold); }
   #how button { border: 0; border-radius: 12px; padding: 14px 2px; font-size: 18px; font-weight: 700; background: var(--panel2); }
   #how button.k { background: var(--gold); color: var(--black); }
   #tobar { position: fixed; left: 10px; right: 10px; top: calc(env(safe-area-inset-top) + 44px); background: #101014; border: 1px solid #33333c;
@@ -161,6 +166,7 @@
     <button class="k" data-act="how" data-kind="KILL">Kill</button>
     <button class="k" data-act="how" data-kind="ACE" id="howAce">Ace</button>
     <button class="k" data-act="how" data-kind="BLOCK">Block</button>
+    <button class="k" data-act="how" data-kind="DIG">Dig</button>
     <button data-act="how" data-kind="OPP_ERROR">Error</button>
     <button data-act="howclose">✕</button>
   </div>
@@ -217,7 +223,9 @@
   <h3>First serve</h3>
   <div class="chips" id="serveChips"></div>
   <h3>Scoreboard look</h3>
-  <div class="note">Corner</div>
+  <div class="note">Layout</div>
+  <div class="chips" id="layoutChips" style="margin:6px 0 12px"></div>
+  <div class="note">Corner (corner box only)</div>
   <div class="chips" id="cornerChips" style="margin:6px 0 12px"></div>
   <div class="note">Size</div>
   <div class="chips" id="sizeChips" style="margin:6px 0 12px"></div>
@@ -236,10 +244,37 @@
   <div id="pickList"></div>
 </div>
 
+<!-- Starting lineups (serving order) -->
+<div id="lineup" class="sheet hidden">
+  <div class="bar"><h2 id="lineupTitle">Starting lineups</h2><button class="link" data-act="lineupdone">Done</button></div>
+  <p class="note">Enter each team's six in <b>serving order</b>: I serves first, then II, III… The video then shows who's serving, and it moves on by itself with every side-out. Subs (More → Substitution) swap a player in place.</p>
+  <div id="lineupTeams"></div>
+  <div class="stack" style="margin-top:14px">
+    <button class="big" data-act="lineupcopy" id="lineupCopyBtn">Same as last set</button>
+    <button class="big" data-act="lineupclear">Clear this set's lineups</button>
+  </div>
+</div>
+
+<!-- Which team? -->
+<div id="teamq" class="sheet hidden">
+  <div class="bar"><h2 id="teamqTitle">Which team?</h2><button class="link" data-act="close">Cancel</button></div>
+  <div class="stack" id="teamqList"></div>
+</div>
+
 <!-- More -->
 <div id="menu" class="sheet hidden">
   <div class="bar"><h2>More</h2><button class="link" data-act="close">Close</button></div>
-  <h3 style="margin-top:4px">Break screen</h3>
+  <h3 style="margin-top:4px">On the video</h3>
+  <div class="grid2">
+    <button class="big" data-act="lineups">Starting lineups</button>
+    <button class="big" data-act="sub">Substitution</button>
+    <button class="big" data-act="intro">Match intro</button>
+    <button class="big" data-act="potm">Player of the match</button>
+    <button class="big" data-act="sponsor">Show sponsor</button>
+    <button class="big" data-act="dig">Dig (no point)</button>
+  </div>
+  <p class="note">The match intro shows both teams and their starting six until the first point. Sponsors come from the Sponsors tab of your sheet.</p>
+  <h3>Break screen</h3>
   <div class="chips" id="cardTypeChips" style="margin-bottom:10px"></div>
   <div class="note">Countdown</div>
   <div class="chips" id="cardTimeChips" style="margin:6px 0 10px"></div>
@@ -283,6 +318,7 @@
     <li><b>Kill / Ace / Block take turns.</b> If you enter several quickly, each one plays for about 5 seconds, in order. A pill at the top ("2 PLAYS WAITING") shows how many are left; tap it to skip them.</li>
     <li><b>T/O</b> uses one of the team's timeouts for this set (the button shows how many are used). It puts a 30-second timeout banner on the video and offers the full timeout screen.</li>
     <li><b>Serve</b> moves the serve. Points move it automatically.</li>
+    <li><b>More → Starting lineups</b> (serving order) lets the video show who is serving. Subs, the match intro, player of the match and sponsors are in More too.</li>
     <li><b>More</b> has break screens, on-screen messages, hide scoreboard, the camera-phone QR code and the score log.</li>
   </ul>
   <div class="warn"><b>↶ Undo steps back the last change of any kind</b>, one tap at a time: a point, a −1, a serve change, a timeout or a Match setup save. It is not just for points. Tap it slowly and check the score after each tap.</div>
@@ -336,7 +372,7 @@
 
   // ---------------------------------------------------------------- state
   const DEFAULT_STYLE = { corner: 'tl', scale: 1, show: true, homeColor: '#BE121C', awayColor: '#3A5A8C',
-    homeLogo: 'team-robins', awayLogo: null, badge: 'league-ava', eventTitle: '' };
+    homeLogo: 'team-robins', awayLogo: null, badge: 'league-ava', eventTitle: '', layout: 'bar' };
   let match = null;            // MatchState (js/match.js)
   let style = Object.assign({}, DEFAULT_STYLE);
   let serverBanner = null;     // the banner the service last reported
@@ -362,6 +398,10 @@
   const plateCache = {};       // logo id → plate color
 
   function loadEvents() { try { return JSON.parse(A.store(LS + 'log') || '[]'); } catch (e) { return []; } }
+  // Starting lineups per set, in serving order: { "1": { home: ["7", …6], away: [] }, … }
+  let lineups = (function () { try { return JSON.parse(A.store(LS + 'lineups') || '{}'); } catch (e) { return {}; } })();
+  function saveLineups() { A.store(LS + 'lineups', JSON.stringify(lineups)); }
+  let pickCb = null;           // set when the player list picks for something other than a point (sub, lineup, player of the match)
   function saveEvents() { A.store(LS + 'log', JSON.stringify(events.slice(-2000))); }
 
   // ---------------------------------------------------------------- helpers
@@ -370,7 +410,7 @@
     clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 1700);
   }
   function setSync(text, cls) { const s = $('sync'); s.textContent = text; s.className = 'pill ' + cls; }
-  function show(id) { ['setup', 'picker', 'menu', 'keySheet', 'players', 'tips'].forEach(x => $(x).classList.toggle('hidden', x !== id)); }
+  function show(id) { ['setup', 'picker', 'menu', 'keySheet', 'players', 'tips', 'lineup', 'teamq'].forEach(x => $(x).classList.toggle('hidden', x !== id)); }
   function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 
   function logoHtml(id, color, cls) {
@@ -462,12 +502,13 @@
     undoStack.push(entry);
     if (undoStack.length > 500) undoStack.shift();
     match = result.state;
-    const banner = M.bannerFor(result.type, side, match);
+    const banner = style.layout === 'box' ? M.bannerFor(result.type, side, match) : null;
     if (banner) bannerToSend = banner;
     else if (result.type === 'POINT' && currentBannerTitle().indexOf('Timeout') === 0) bannerToSend = null;
     const scored = result.type === 'POINT' || result.type === 'SET_END' || result.type === 'MATCH_END';
     const card = currentCard();
-    if (scored && card && ['soon', 'break', 'timeout', 'brb'].indexOf(card.type) >= 0) cardToSend = null; // play resumed
+    if (scored && card && ['soon', 'break', 'timeout', 'brb', 'intro'].indexOf(card.type) >= 0) cardToSend = null; // play resumed
+    if (result.type === 'SET_END' && !match.matchOver) setTimeout(() => toast('Set ' + match.setNumber + ': More → Starting lineups for this set’s six'), 1800);
     const index = record(result.type, side);
     entry.eventIndex = index;
     if (result.type === 'CORRECTION') entry.removed = markRemoved(side);
@@ -583,7 +624,7 @@
     const mySeq = ++seq;
     const sentChanges = changes;   // taps made while this save is in flight go out next
     const banner = bannerToSend, card = cardToSend, play = playToSend;
-    const body = { court, key, by: clientId, seq: mySeq, baseVersion: serverVersion, match, style };
+    const body = { court, key, by: clientId, seq: mySeq, baseVersion: serverVersion, match: matchWithExtras(), style };
     if (banner !== undefined) body.banner = banner;
     if (card !== undefined) body.card = card;
     if (play !== undefined) body.play = play;
@@ -627,6 +668,78 @@
       saving = false;
     }
     if (dirty) setTimeout(flush, retryIn);
+  }
+
+  // ---------------------------------------------------------------- lineups, server and stats for the video
+  /** Kill / ace / block / dig counts this match, per team and player, from the score log (undone points left out). */
+  function matchStats() {
+    const out = {};
+    ['home', 'away'].forEach(side => { out[side] = { kills: 0, aces: 0, blocks: 0, digs: 0, players: {} }; });
+    const field = { KILL: 'kills', ACE: 'aces', BLOCK: 'blocks', DIG: 'digs' };
+    let any = false;
+    events.forEach(e => {
+      const f = field[e.kind];
+      if (!f || e.undone || !out[e.side]) return;
+      any = true;
+      const t = out[e.side];
+      t[f]++;
+      if (e.number) {
+        const p = t.players[e.number] || (t.players[e.number] = { name: M.lastName(e.player || nameFor(e.side, e.number)).slice(0, 20), kills: 0, aces: 0, blocks: 0, digs: 0 });
+        p[f]++;
+        if (!p.name && e.player) p.name = M.lastName(e.player).slice(0, 20);
+      }
+    });
+    if (!any) return null;
+    // Keep the board small: leave out the zero counts (readers treat a missing count as 0).
+    ['home', 'away'].forEach(side => Object.values(out[side].players).forEach(p =>
+      ['kills', 'aces', 'blocks', 'digs'].forEach(k => { if (!p[k]) delete p[k]; })));
+    return out;
+  }
+
+  function lineupFor(set) { return lineups[String(set)] || null; }
+
+  /** Who is serving now: the serving team's lineup, moved on one place for every side-out it has won this set. */
+  function currentServer() {
+    if (!match || !match.serving || match.matchOver) return null;
+    const lu = lineupFor(match.setNumber);
+    const order = lu && lu[match.serving];
+    if (!order || order.filter(Boolean).length < 6) return null;
+    // Serving order: the first server's team starts on its I; the other team serves its I after its first side-out.
+    const first = match.firstServerThisSet || match.serving;
+    const turns = { home: first === 'home' ? 0 : -1, away: first === 'away' ? 0 : -1 };
+    let prev = first;
+    events.forEach(e => {
+      if (e.set !== match.setNumber || e.undone) return;
+      if (e.type === 'SERVE') { prev = e.serving || prev; return; }
+      if (e.type !== 'POINT') return;
+      if (e.side !== prev) turns[e.side]++;   // a side-out: that team rotates, then serves
+      prev = e.side;
+    });
+    if (turns[match.serving] < 0) return null;
+    const number = order[turns[match.serving] % 6];
+    if (!number) return null;
+    const p = rosterFor(match.serving).find(x => x.num === number);
+    return { side: match.serving, number, name: p ? M.lastName(p.name).slice(0, 20) : '' };
+  }
+
+  function matchWithExtras() {
+    if (!match) return match;
+    const extra = {};
+    const lu = lineupFor(match.setNumber);
+    if (lu) extra.lineup = { home: (lu.home || []).filter(Boolean), away: (lu.away || []).filter(Boolean) };
+    const srv = currentServer();
+    if (srv) extra.server = srv;
+    const st = matchStats();
+    if (st) extra.stats = st;
+    return Object.keys(extra).length ? Object.assign({}, match, extra) : match;
+  }
+
+  function statLine(side, number) {
+    const st = matchStats();
+    const p = st && st[side] && st[side].players[number];
+    if (!p) return '';
+    return [['kills', 'KILLS'], ['aces', 'ACES'], ['blocks', 'BLOCKS'], ['digs', 'DIGS']].filter(([k]) => (p[k] || 0) > 0)
+      .map(([k, w]) => p[k] + ' ' + (p[k] === 1 ? w.slice(0, -1) : w)).join('  ·  ');
   }
 
   function adopt(board) {
@@ -737,6 +850,8 @@
     fillCap();
     chips('serveChips', [{ label: 'Home', value: 'home' }, { label: 'Away', value: 'away' }, { label: 'Decide later', value: '' }],
       draft.firstServe, v => { draft.firstServe = v; fillSetup(); });
+    chips('layoutChips', [{ label: 'Bottom bar (like VNL)', value: 'bar' }, { label: 'Corner box', value: 'box' }],
+      draft.layout || 'bar', v => { draft.layout = v; fillSetup(); });
     chips('cornerChips', [{ label: 'Top left', value: 'tl' }, { label: 'Top right', value: 'tr' }, { label: 'Bottom left', value: 'bl' }, { label: 'Bottom right', value: 'br' }],
       draft.corner, v => { draft.corner = v; fillSetup(); });
     chips('sizeChips', [{ label: 'Small', value: 0.85 }, { label: 'Medium', value: 1 }, { label: 'Large', value: 1.2 }],
@@ -784,7 +899,8 @@
     return { corner: draft.corner, scale: Number(draft.scale) || 1, show: style.show !== false,
       homeColor: draft.homeColor, awayColor: draft.awayColor, homeAccent: draft.homeAccent || '', awayAccent: draft.awayAccent || '',
       homeKit: draft.homeKit || null, awayKit: draft.awayKit || null, division: draft.division || 'men',
-      homeLogo: draft.homeLogo || null, awayLogo: draft.awayLogo || null, badge: draft.badge || null, eventTitle: draft.eventTitle };
+      homeLogo: draft.homeLogo || null, awayLogo: draft.awayLogo || null, badge: draft.badge || null, eventTitle: draft.eventTitle,
+      layout: draft.layout === 'box' ? 'box' : 'bar' };
   }
 
   function applySetup(newMatch) {
@@ -797,6 +913,7 @@
       style = draftStyle();
       bannerToSend = null;
       events = [];
+      lineups = {}; saveLineups();
       record('NEW_MATCH', '');
       playQueue = [];
       loadRosters(false);
@@ -874,7 +991,7 @@
   });
 
   // ---------------------------------------------------------------- how the point was won
-  const KIND_LABEL = { KILL: 'Kill', ACE: 'Ace', BLOCK: 'Block', OPP_ERROR: 'Opponent error' };
+  const KIND_LABEL = { KILL: 'Kill', ACE: 'Ace', BLOCK: 'Block', DIG: 'Dig', OPP_ERROR: 'Opponent error' };
 
   function askHow(side, eventIndex, canAce) {
     const ev = events[eventIndex] || {};
@@ -885,7 +1002,7 @@
       mark: { side, total: totalPoints(match, side), homeName: match.homeName, awayName: match.awayName } };
     $('howQ').textContent = 'How did ' + M.name(match, side).toUpperCase() + ' score?';
     $('howAce').classList.toggle('hidden', !canAce);
-    document.querySelector('#how .opts').style.gridTemplateColumns = 'repeat(' + (canAce ? 5 : 4) + ', 1fr)';
+    document.querySelector('#how .opts').style.gridTemplateColumns = 'repeat(' + (canAce ? 6 : 5) + ', 1fr)';
     $('how').classList.remove('hidden');
     clearTimeout(howTimer);
     howTimer = setTimeout(closeHow, 9000);
@@ -902,7 +1019,7 @@
 
   function tagEvent(number, player) {
     const e = events[how.eventIndex];
-    if (e) { e.kind = how.kind; e.number = number || ''; e.player = player || ''; saveEvents(); }
+    if (e) { e.kind = how.kind; e.number = number || ''; e.player = player || ''; saveEvents(); queueSave(); }   // the stats on the video change
   }
 
   /** The players for one side: Robins from the Robins Rosters tab, everyone else from League Rosters. */
@@ -923,9 +1040,27 @@
   }
 
   function openPlayers() {
-    const side = how.side;
-    $('playersTitle').textContent = KIND_LABEL[how.kind] + ' · ' + M.name(match, side).toUpperCase() + ' · who?';
-    const list = rosterFor(side);
+    pickCb = null;
+    showPlayers(how.side, KIND_LABEL[how.kind] + ' · ' + M.name(match, how.side).toUpperCase() + ' · who?');
+  }
+
+  /** The player list for [side]; [cb](number, name) gets the pick instead of a point's play. */
+  function openPlayersFor(side, title, cb, first) {
+    pickCb = cb;
+    showPlayers(side, title, first);
+  }
+
+  let lastShown = null;
+  function showPlayers(side, title, first) {
+    lastShown = [side, title, first];
+    $('playersTitle').textContent = title;
+    let list = rosterFor(side);
+    if (first && first.length) {   // e.g. the six on court first when picking who goes out
+      const on = list.filter(p => first.indexOf(p.num) >= 0);
+      const known = on.map(p => p.num);
+      first.filter(n => known.indexOf(n) < 0).forEach(n => on.push({ num: n, name: '', note: 'on court' }));
+      list = on.concat(list.filter(p => first.indexOf(p.num) < 0));
+    }
     const counts = {};
     list.forEach(p => { counts[p.num] = (counts[p.num] || 0) + 1; });
     $('playerList').innerHTML = list.map((p, i) =>
@@ -965,7 +1100,7 @@
       if (wait > 0) pumpTimer = setTimeout(pumpPlays, wait);
       else {
         const p = playQueue.shift();
-        playToSend = Object.assign({ kind: p.kind, side: p.side, number: p.number, name: p.name, id: p.id }, p.rally || {});
+        playToSend = Object.assign({ kind: p.kind, side: p.side, number: p.number, name: p.name, id: p.id }, p.extra || {}, p.rally || {});
         queueSave();
       }
     }
@@ -982,8 +1117,111 @@
     const b = e.target.closest('[data-player]');
     if (!b) return;
     const p = $('playerList')._list[Number(b.dataset.player)];
-    sendPlay(p.num, p.name);
+    picked(p.num, p.name);
   });
+
+  /** The roster name for a typed number, when only one player on that team wears it. */
+  function nameFor(side, number) {
+    if (!number || !side) return '';
+    const same = rosterFor(side).filter(p => p.num === number && p.name);
+    return same.length === 1 ? same[0].name : '';
+  }
+
+  function picked(number, name) {
+    if (number && !name && lastShown) name = nameFor(lastShown[0], number);
+    if (pickCb) { const cb = pickCb; pickCb = null; cb(number || '', name || ''); }
+    else sendPlay(number, name);
+  }
+
+  /** Puts any play (sub, player of the match, sponsor, dig) in line for the video, like Kill / Ace / Block. */
+  function queuePlay(kind, side, number, name, extra, label) {
+    const waiting = playQueue.length + (playToSend ? 1 : 0) + (Date.now() - playOnAirAt < PLAY_GAP ? 1 : 0);
+    playQueue.push({ kind, side, number: number || '', name: name || '', extra: extra || null,
+      id: Math.random().toString(36).slice(2, 10), mark: null, rally: null, queuedAt: Date.now() });
+    show(null);
+    pumpPlays();
+    toast(waiting ? label + ' is next in line (' + waiting + ' ahead)' : label + ' on screen');
+  }
+
+  // ---------------------------------------------------------------- teams, lineups, subs, player of the match
+  function chooseTeam(title, cb) {
+    if (!match) { toast('Set up the match first'); return; }
+    $('teamqTitle').textContent = title;
+    $('teamqList').innerHTML = ['home', 'away'].map(side =>
+      '<button class="big" data-team="' + side + '" style="background:' + esc(style[side + 'Color'] || '#333') + ';color:' + M.textOn(style[side + 'Color'] || '#333333') + '">' +
+      esc(M.name(match, side).toUpperCase()) + '</button>').join('');
+    $('teamqList')._cb = cb;
+    show('teamq');
+  }
+  $('teamqList').addEventListener('click', e => {
+    const b = e.target.closest('[data-team]');
+    if (b && $('teamqList')._cb) $('teamqList')._cb(b.dataset.team);
+  });
+
+  const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI'];
+  function openLineups() {
+    if (!match) { toast('Set up the match first'); return; }
+    const n = String(match.setNumber);
+    const lu = lineups[n] || { home: ['', '', '', '', '', ''], away: ['', '', '', '', '', ''] };
+    lineups[n] = lu;
+    const srv = currentServer();
+    $('lineupTitle').textContent = 'Starting lineups · set ' + n;
+    $('lineupTeams').innerHTML = ['home', 'away'].map(side => '<h3>' + esc(M.name(match, side).toUpperCase()) + '</h3><div class="slots">' +
+      ROMAN.map((r, i) => '<button class="slot' + (srv && srv.side === side && srv.number === lu[side][i] ? ' serving' : '') + '" data-slot="' + side + ':' + i + '"><small>' + r +
+        '</small><b>' + (lu[side][i] ? esc(lu[side][i]) : '·') + '</b></button>').join('') + '</div>').join('');
+    const prev = lineups[String(match.setNumber - 1)];
+    $('lineupCopyBtn').classList.toggle('hidden', !prev);
+    show('lineup');
+  }
+  $('lineupTeams').addEventListener('click', e => {
+    const b = e.target.closest('[data-slot]');
+    if (!b) return;
+    const [side, i] = b.dataset.slot.split(':');
+    openPlayersFor(side, M.name(match, side).toUpperCase() + ' · position ' + ROMAN[i] + (i === '0' ? ' (serves first)' : ''), num => {
+      const lu = lineups[String(match.setNumber)];
+      const at = lu[side].indexOf(num);
+      if (at >= 0 && num) lu[side][at] = lu[side][Number(i)];   // already placed: swap
+      lu[side][Number(i)] = num;
+      saveLineups(); queueSave(); openLineups();
+    });
+  });
+
+  function startSub() {
+    chooseTeam('Substitution · which team?', side => {
+      const lu = lineupFor(match.setNumber);
+      const onCourt = lu ? lu[side].filter(Boolean) : [];
+      openPlayersFor(side, 'Sub · ' + M.name(match, side).toUpperCase() + ' · who comes IN?', (inNum, inName) => {
+        openPlayersFor(side, 'Sub · who goes OUT for #' + (inNum || '?') + '?', (outNum, outName) => {
+          if (lu && outNum && lu[side].indexOf(outNum) >= 0) { lu[side][lu[side].indexOf(outNum)] = inNum; saveLineups(); }
+          const nameOf = (num, nm) => nm || ((rosterFor(side).find(p => p.num === num) || {}).name || '');
+          queuePlay('SUB', side, inNum, M.lastName(nameOf(inNum, inName)), { out: outNum || '', outName: M.lastName(nameOf(outNum, outName)) },
+            'Sub #' + (inNum || '?') + ' for #' + (outNum || '?'));
+        }, onCourt);
+      });
+    });
+  }
+
+  function startPotm() {
+    chooseTeam('Player of the match · which team?', side => {
+      openPlayersFor(side, 'Player of the match · ' + M.name(match, side).toUpperCase(), (num, name) => {
+        const full = String(name || '').replace(/\s*[“"][^”"]*[”"]\s*/g, ' ').replace(/\s+/g, ' ').trim();   // no nickname in quotes
+        queuePlay('POTM', side, num, full.slice(0, 40), { text: statLine(side, num) }, 'Player of the match');
+      });
+    });
+  }
+
+  function startDig() {
+    chooseTeam('Dig · which team?', side => {
+      openPlayersFor(side, 'Dig · ' + M.name(match, side).toUpperCase() + ' · who?', (num, name) => {
+        events.push({ time: new Date().toISOString(), type: 'PLAY', side, set: match.setNumber, home: match.home, away: match.away,
+          setsHome: M.setsWon(match, 'home'), setsAway: M.setsWon(match, 'away'), serving: match.serving || '',
+          homeName: match.homeName, awayName: match.awayName, kind: 'DIG', number: num || '', player: name || '' });
+        saveEvents();
+        queueSave();
+        queuePlay('DIG', side, num, name ? M.lastName(name) : '', null, 'Dig' + (num ? ' · #' + num : ''));
+      });
+    });
+  }
 
   /** Names of the two teams playing (with their other spellings), so the service sends only their players. */
   function matchBases() {
@@ -1003,7 +1241,7 @@
       if (res.ok && res.league) { rosters = res; rosterError = ''; }
       else rosterError = res.error === 'key' ? 'scorer code' : 'the service needs the version 2 update';
     } catch (e) { rosterError = 'no connection'; }
-    if (!$('players').classList.contains('hidden')) openPlayers();
+    if (!$('players').classList.contains('hidden') && lastShown) showPlayers.apply(null, lastShown);
     if (draft && !$('setup').classList.contains('hidden')) { readSetupFields(); fillSetup(); }
   }
 
@@ -1120,14 +1358,32 @@
       case 'numonly': {
         const n = $('numIn').value.replace(/[^0-9]/g, '');
         if (!n) { toast('Type the jersey number'); break; }
-        sendPlay(n, '');
+        picked(n, '');
         break;
       }
-      case 'noplayer': sendPlay('', ''); break;
+      case 'noplayer': picked('', ''); break;
       case 'rosterrefresh': $('rosterNote').textContent = 'Reloading…'; loadRosters(true); break;
       case 'showcard': showCard(); break;
       case 'hidecard': hideCard(); break;
-      case 'close': show(null); break;
+      case 'close': pickCb = null; show(null); break;
+      case 'lineups': openLineups(); break;
+      case 'lineupdone': show(null); queueSave(); toast(currentServer() ? 'Lineups saved · the video shows who serves' : 'Lineups saved'); break;
+      case 'lineupcopy': {
+        const prev = lineups[String(match.setNumber - 1)];
+        if (prev) { lineups[String(match.setNumber)] = { home: prev.home.slice(), away: prev.away.slice() }; saveLineups(); queueSave(); openLineups(); }
+        break;
+      }
+      case 'lineupclear': delete lineups[String(match.setNumber)]; saveLineups(); queueSave(); openLineups(); break;
+      case 'sub': startSub(); break;
+      case 'potm': startPotm(); break;
+      case 'dig': startDig(); break;
+      case 'sponsor': if (!match) { toast('Set up the match first'); break; } queuePlay('SPONSOR', 'home', '', '', null, 'Sponsor card'); break;
+      case 'intro':
+        if (!match) { toast('Set up the match first'); break; }
+        cardToSend = { type: 'intro', title: '', message: '', seconds: 0 };
+        render(); queueSave(); show(null);
+        toast('Match intro on · it goes away on the first point (or More → Hide it)');
+        break;
       case 'pick': openPicker(side); break;
       case 'pickback': if (pickRegion) { pickRegion = null; renderPicker(); } else show('setup'); break;
       case 'apply': applySetup(false); break;

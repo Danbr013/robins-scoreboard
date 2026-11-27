@@ -6,19 +6,28 @@
 <title>Robins Scoreboard · Overlay</title>
 <!--
   Add this page to Tubeist (Settings → Overlays) as:  overlay.html?court=1
-  The page is see-through; it draws the scorebug, the corner badge, banners, stat animations
-  and full-screen break cards. Open with &preview=1 in a browser to see it over a gym-colored
-  background, and &demo=1 (plus &card=break or &play=ace) for sample graphics without the service.
+  The page is see-through. With the bottom bar (the default look, style.layout "bar") it draws the
+  VNL-style score bar and every broadcast moment from docs/GRAPHICS.md on a canvas, the same way the
+  Android app does (js/director.js decides what runs when, js/broadcast.js draws it). With the corner
+  box ("box") it draws the classic scorebug, banners and stat plays. Full-screen break cards are the
+  same in both. Open with &preview=1 in a browser to see it over a gym-colored background, and &demo=1
+  (plus &card=break, &card=intro, &play=kill|ace|sub|potm|sponsor, &do=point|run|timeout|setwon,
+  &layout=box) for sample graphics without the service.
 
   Tubeist only re-captures the page when something changes or an animation runs, as long as the
-  page has no <img> tags and no url() in its CSS. So logos are SVG <image> elements and the
-  fonts are loaded from script.
+  page has no <img> tags and no url() in its CSS. So logos are SVG <image> elements (or images drawn
+  on the canvas), the fonts are loaded from script, and while the canvas moves the page also changes
+  an attribute every frame and runs a small CSS animation.
 -->
 <style>
   html, body { margin: 0; padding: 0; background: transparent !important; overflow: hidden; width: 100%; height: 100%; }
   body.preview { background: linear-gradient(160deg, #6b5a44 0%, #a88d62 48%, #3c4a5a 100%) !important; }
   #stage { position: absolute; left: 0; top: 0; width: 1280px; height: 720px; transform-origin: 0 0; }
   #stage > div { position: absolute; inset: 0; }
+  #gfx { position: absolute; left: 0; top: 0; width: 1280px; height: 720px; }
+  #beat { position: absolute; left: 0; top: 0; width: 1px; height: 1px; opacity: .001; }
+  body.moving #beat { animation: beat .4s linear infinite; }
+  @keyframes beat { from { opacity: .001; } to { opacity: .002; } }
   .abs { position: absolute; }
   .bug { background: rgba(8, 8, 10, .88); }
   .stripe, .pts, .sets { position: absolute; }
@@ -70,22 +79,25 @@
     white-space: nowrap; line-height: 1; }
   #brand b { color: #ECA030; font-weight: 600; }
   #brand.left { right: auto; left: 20px; }
+  #brand.top { right: auto; left: 20px; bottom: auto; top: 16px; }
   #status { position: fixed; left: 8px; bottom: 6px; font: 600 13px system-ui, sans-serif; color: #fff; background: rgba(0,0,0,.55);
     padding: 3px 8px; border-radius: 6px; display: none; }
   body.preview #status { display: block; }
 </style>
 </head>
 <body>
-<div id="stage"><div id="board"></div><div id="fx"></div><div id="card"></div><span id="brand" class="c">Powered by <b>Robins Volleyball Club</b></span></div>
+<div id="stage"><div id="board"></div><div id="fx"></div><canvas id="gfx" width="1280" height="720"></canvas><div id="card"></div><span id="brand" class="c">Powered by <b>Robins Volleyball Club</b></span><i id="beat"></i></div>
 <div id="status">Connecting…</div>
 <script src="config.js"></script>
 <script src="js/match.js"></script>
 <script src="js/teams.js"></script>
 <script src="js/api.js"></script>
+<script src="js/director.js"></script>
+<script src="js/broadcast.js"></script>
 <script>
 (function () {
   'use strict';
-  const M = window.RobinsMatch, T = window.RobinsTeams, A = window.RobinsApi;
+  const M = window.RobinsMatch, T = window.RobinsTeams, A = window.RobinsApi, D = window.RobinsDirector, B = window.RobinsBroadcast;
   const W = 1280, H = 720;
   const brand = document.getElementById('brand');
   const GOLD = '#ECA030', CREAM = '#FAF6ED', PANEL = '#1C1C22', BLACK = '#08080A';
@@ -106,6 +118,52 @@
   let lastPoints = null;     // to make the points that just changed "pop"
   let geometry = null;       // where the scorebug is, for stat plays
 
+  // ---------------------------------------------------------------- broadcast graphics (canvas)
+  const gfx = document.getElementById('gfx');
+  const ctx = gfx.getContext('2d');
+  const director = D.Director();
+  let sponsors = [];         // [{ name, logo: data URL or '' }] from the Sponsors tab
+  const images = {};
+  function imageFor(url) {
+    if (!url) return null;
+    let img = images[url];
+    if (!img) { img = new Image(); img.onload = function () { kick(); }; img.src = url; images[url] = img; }
+    return img.complete && img.naturalWidth ? img : null;
+  }
+  const renderer = B.Renderer({
+    logo: id => imageFor(T.logoUrl(id)),
+    sponsor: i => { const sp = sponsors[i]; return sp ? { name: sp.name, image: sp.logo ? imageFor(sp.logo) : null } : null; },
+  });
+  let lastFrame = null, frameNo = 0, loopTimer = 0, lastDraw = 0;
+  function layoutOf(st) { return st.layout === 'box' ? 'box' : 'bar'; }
+  function fullCard(b) { return !!(b && b.card && b.card.type && b.card.type !== 'intro'); }
+  function clearGfx() { ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, gfx.width, gfx.height); lastFrame = null; }
+
+  function drawGfx(now) {
+    if (!board || !M.isValid(board.match) || fullCard(board)) { clearGfx(); return; }
+    const st = styleOf(board);
+    const f = director.frame(now);
+    lastFrame = f;
+    ctx.setTransform(gfx.width / W, 0, 0, gfx.height / H, 0, 0);
+    renderer.draw(ctx, board.match, st, f, director.extras, layoutOf(st), st.show !== false);
+    stage.dataset.frame = String(++frameNo % 1000);   // a change Tubeist can see
+  }
+
+  /** Draws now, and keeps drawing (about 30 a second) while something moves. */
+  function kick() {
+    if (loopTimer) return;
+    loopTimer = setTimeout(loop, 0);
+  }
+  function loop() {
+    loopTimer = 0;
+    const now = Date.now();
+    drawGfx(now);
+    lastDraw = now;
+    const moving = !!board && !fullCard(board) && director.animating(now);
+    document.body.classList.toggle('moving', moving);
+    if (moving) loopTimer = setTimeout(loop, 33);
+  }
+
   function fitStage() {
     const vw = document.documentElement.clientWidth || window.innerWidth;
     const vh = document.documentElement.clientHeight || window.innerHeight;
@@ -113,6 +171,10 @@
     stage.style.transform = 'scale(' + k + ')';
     stage.style.left = Math.max(0, (vw - W * k) / 2) + 'px';
     stage.style.top = Math.max(0, (vh - H * k) / 2) + 'px';
+    // The canvas at the size it is shown, so 1080p video stays sharp.
+    const px = Math.max(1, k * (window.devicePixelRatio || 1));
+    const cw = Math.round(W * px), ch = Math.round(H * px);
+    if (gfx.width !== cw || gfx.height !== ch) { gfx.width = cw; gfx.height = ch; if (board) kick(); }
   }
 
   function el(cls, css, parent) {
@@ -168,19 +230,30 @@
   function render() {
     layer.board.textContent = '';
     geometry = null;
-    if (!board || !M.isValid(board.match)) { layer.card.textContent = ''; return; }
+    if (!board || !M.isValid(board.match)) { layer.card.textContent = ''; clearInterval(cardTimer); clearGfx(); return; }
     const s = board.match;
     const st = styleOf(board);
-    brand.classList.toggle('left', st.corner === 'br');
+    const layout = layoutOf(st);
+    brand.classList.toggle('left', layout === 'box' && st.corner === 'br');
+    brand.classList.toggle('top', layout === 'bar');
     const left = st.corner === 'tl' || st.corner === 'bl';
     const top = st.corner === 'tl' || st.corner === 'tr';
     const card = board.card;
-    if (card && card.type) { drawCard(card, s, st); return; }
+    if (fullCard(board)) { drawCard(card, s, st); clearGfx(); return; }
     layer.card.textContent = '';
-    if (st.show !== false) drawScorebug(s, st, left, top);
-    if (st.badge) drawBadge(st, left);
+    clearInterval(cardTimer);
     const b = board.banner;
-    if (b && b.title && (bannerUntil === 0 || Date.now() < bannerUntil)) drawBanner(b, top || st.show === false);
+    const bannerUp = b && b.title && (bannerUntil === 0 || Date.now() < bannerUntil);
+    if (layout === 'box') {
+      if (st.show !== false) drawScorebug(s, st, left, top);
+      if (st.badge) drawBadge(st, left);
+      if (bannerUp) drawBanner(b, top || st.show === false);
+    } else {
+      // The bar carries the badge; with the scoreboard hidden it goes in the corner.
+      if (st.show === false && st.badge) drawBadge(st, true);
+      if (bannerUp) drawBanner(b, false);
+    }
+    kick();
   }
 
   function drawScorebug(s, st, left, top) {
@@ -437,16 +510,39 @@
     }
     const changed = JSON.stringify(next) !== JSON.stringify(board);
     board = next;
+    // The director sees every board (repeats are ignored), before anything is drawn.
+    const now = Date.now();
+    director.sponsorCount = sponsors.length;
+    director.card(next && next.card && next.card.type ? next.card.type : null, now);
+    if (next && M.isValid(next.match)) director.observe(next.match, D.extrasFrom(next.match), now);
+    const p = next && next.play;
+    if (lastPlayAt === null) lastPlayAt = p ? p.at : 0;      // don't replay old plays on load
+    else if (p && p.at !== lastPlayAt) {
+      lastPlayAt = p.at;
+      const age = (res.now || Date.now()) - p.at;
+      if (age < 20000) director.event(p, now);
+      // The corner box keeps its own stat play beside the scorebug.
+      if (layoutOf(styleOf(next)) === 'box' && age < 9000 && ['KILL', 'ACE', 'BLOCK', 'DIG'].indexOf(String(p.kind).toUpperCase()) >= 0 &&
+          !(next.card && next.card.type) && styleOf(next).show !== false) playStat(p);
+    }
     if (changed) {
       try { render(); } catch (e) { layer.board.textContent = ''; console.log('Board not drawn: ' + e.message); }
     }
-    const p = next && next.play;
-    if (lastPlayAt === null) { lastPlayAt = p ? p.at : 0; return; }      // don't replay old plays on load
-    if (p && p.at !== lastPlayAt) {
-      lastPlayAt = p.at;
-      const age = (res.now || Date.now()) - p.at;
-      if (age < 9000 && !(next.card && next.card.type) && styleOf(next).show !== false) playStat(p);
-    }
+    kick();
+  }
+
+  /** The Sponsors tab, when following starts and every 10 minutes (a version-3 service has none). */
+  async function loadSponsors() {
+    let wait = 600000;
+    try {
+      const r = await A.getSponsors(court);
+      if (r && r.ok) {
+        sponsors = (Array.isArray(r.sponsors) ? r.sponsors : []).filter(x => x && x.name).slice(0, 12)
+          .map(x => ({ name: String(x.name).slice(0, 40), logo: /^data:image\/(png|jpeg|webp|gif);base64,/.test(x.logo || '') ? x.logo : '' }));
+        director.sponsorCount = sponsors.length;
+      }
+    } catch (e) { wait = 60000; }
+    setTimeout(loadSponsors, wait);
   }
 
   let lastOk = 0;
@@ -454,7 +550,7 @@
     try {
       accept(await A.getBoard(court));
       lastOk = Date.now();
-      status.textContent = 'Court ' + court + ' · live';
+      status.textContent = 'Court ' + court + ' · live' + (sponsors.length ? ' · ' + sponsors.length + ' sponsor' + (sponsors.length === 1 ? '' : 's') : '');
     } catch (e) {
       status.textContent = e.message === 'not-configured' ? 'Live-score service not set up yet (config.js)' :
         'Court ' + court + ' · reconnecting… (last update ' + (lastOk ? Math.round((Date.now() - lastOk) / 1000) + ' s ago' : 'never') + ')';
@@ -471,7 +567,8 @@
     const cardType = params.get('card');
     return { ok: true, now, board: { version: 1, match: s,
       style: { corner: params.get('corner') || 'tl', scale: Number(params.get('scale')) || 1, show: true, homeColor: '#BE121C', awayColor: '#1E8C88',
-        homeLogo: 'team-robins', awayLogo: params.get('away') || 'team-macdill', badge: params.get('badge') || 'league-ava', eventTitle: 'Gulf Regionals', division: 'men' },
+        homeLogo: 'team-robins', awayLogo: params.get('away') || 'team-macdill', badge: params.get('badge') || 'league-ava', eventTitle: 'Gulf Regionals', division: 'men',
+        layout: params.get('layout') === 'box' ? 'box' : 'bar' },
       banner: params.has('banner') ? { title: 'Robins win set 1', subtitle: 'Robins 25 – 6 MacDill', seconds: 0, at: now } : null,
       card: cardType ? { type: cardType, title: '', message: params.get('msg') || '', seconds: Number(params.get('sec') || 0), at: now } : null,
       play: null } };
@@ -484,16 +581,39 @@
     await Promise.all(faces.map(f => f.load().then(x => document.fonts.add(x)).catch(() => null)));
   }
 
+  window.RobinsOverlay = { texts: () => (lastFrame ? renderer.texts() : []), frame: () => lastFrame && {
+    panel: lastFrame.panel && lastFrame.panel.kind, extension: lastFrame.extension && lastFrame.extension.kind,
+    tag: lastFrame.tag && lastFrame.tag.kind, pointTag: lastFrame.pointTag && lastFrame.pointTag.situation.kind } };
   window.addEventListener('resize', fitStage);
   fitStage();
   Promise.all([T.load(), loadFonts()]).then(function () {
     if (demo) {
-      accept(demoBoard());
+      if (params.has('sponsors')) sponsors = [{ name: "Walk-On's Sports Bistreaux", logo: '' }, { name: 'CowPies Pizza Co.', logo: '' }];
+      const first = demoBoard();
+      first.board.match.lineup = { home: ['10', '17', '3', '4', '5', '6'], away: ['12', '5', '21', '22', '23', '24'] };
+      first.board.match.stats = { home: { kills: 9, aces: 2, blocks: 3, digs: 11, players: { 10: { name: 'Tolliver', kills: 4, aces: 1 } } },
+        away: { kills: 6, aces: 1, blocks: 1, digs: 8, players: {} } };
+      accept(first);
       status.textContent = 'Demo';
-      const kind = params.get('play');
-      if (kind) setTimeout(function () { playStat({ kind: kind.toUpperCase(), side: params.get('side') || 'home', number: params.get('num') || '10', name: params.get('name') || 'Tolliver' }); }, 300);
+      const step = function (s) { const b = JSON.parse(JSON.stringify(board)); b.match = Object.assign(b.match, s); accept({ ok: true, now: Date.now(), board: b }); };
+      setTimeout(function () {
+        const what = params.get('do');
+        let s = board.match;
+        if (what === 'point') step(M.point(s, 'home').state);
+        if (what === 'run') for (let i = 0; i < 4; i++) { s = M.point(s, 'home').state; step(s); }
+        if (what === 'timeout') step(M.timeout(s, 'away').state);
+        if (what === 'setwon') { while (s.setNumber === board.match.setNumber && !s.matchOver) s = M.point(s, 'home').state; step(s); }
+        const kind = (params.get('play') || '').toUpperCase();
+        if (kind) {
+          const p = { kind, side: params.get('side') || 'home', number: params.get('num') || '10', name: params.get('name') || 'Tolliver',
+            out: '3', outName: 'Lee', text: kind === 'POTM' ? '12 KILLS  ·  3 ACES' : '', at: Date.now() };
+          if (layoutOf(styleOf(board)) === 'box' && PLAY_WORDS[kind]) playStat(p);
+          director.event(p, Date.now()); kick();
+        }
+      }, 300);
     } else {
       poll();
+      loadSponsors();
     }
     // Banners that run out need a redraw even when nothing new arrives.
     setInterval(function () { if (bannerUntil > 0 && Date.now() >= bannerUntil && board && board.banner) { bannerUntil = -1; render(); } }, 500);

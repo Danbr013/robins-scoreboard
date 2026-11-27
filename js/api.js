@@ -60,6 +60,20 @@
     } finally { clearTimeout(timer); }
   }
 
+  /** The court's sponsors for the video (service version 4): { ok, sponsors: [{ name, logo: data URL or '' }] }. */
+  async function getSponsors(courtId, timeoutMs) {
+    const url = backend();
+    if (!url) throw new Error('not-configured');
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), timeoutMs || 20000);
+    try {
+      const sep = url.includes('?') ? '&' : '?';
+      const r = await fetch(url + sep + 'court=' + encodeURIComponent(courtId) + '&op=sponsors&t=' + Date.now(), { cache: 'no-store', signal: ctrl.signal });
+      if (!r.ok) throw new Error('http-' + r.status);
+      return await r.json();
+    } finally { clearTimeout(timer); }
+  }
+
   async function post(body, timeoutMs) {
     const url = backend();
     if (!url) throw new Error('not-configured');
@@ -79,5 +93,5 @@
     return null;
   }
 
-  root.RobinsApi = { backend, court, getBoard, post, store, teamService, serviceTag, link, APPS_SCRIPT };
+  root.RobinsApi = { backend, court, getBoard, getSponsors, post, store, teamService, serviceTag, link, APPS_SCRIPT };
 })(window);
