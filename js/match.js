@@ -247,14 +247,14 @@
     return luminance(hex) > 0.33 ? '#08080A' : '#FAF6ED';
   }
 
-  /** Words that belong with the surname after them: Del Sordo, De La Cruz, Van Asch, San Nicolas, Della Pia. */
+  /** Words that belong with the surname after them: Del Toro, De La Rosa, Van Dyke, San Martin, Della Costa. */
   const PARTICLES = ['de', 'del', 'della', 'dela', 'delos', 'la', 'las', 'los', 'le', 'van', 'von', 'der', 'den', 'ter', 'ten',
     'da', 'das', 'do', 'dos', 'di', 'du', 'san', 'santa', 'st', 'st.', 'ste', 'saint', 'al', 'el', 'bin', 'ibn'];
 
   /**
-   * The surname for the video: "Julius “Buck” Tolliver" → "Tolliver", "Giovanna “G” Del Sordo" → "Del Sordo",
-   * "Sheila De La Cruz" → "De La Cruz", "Roberto Manuel Guillen Jr" → "Guillen". Double surnames with no particle
-   * ("Criado Marrero") can't be told from a middle name, so rosters can give the surname outright (Last name on stream).
+   * The surname for the video: "Julius “Buck” Tolliver" → "Tolliver", "Ana “Ani” Del Toro" → "Del Toro",
+   * "Rosa De La Rosa" → "De La Rosa", "Juan Carlos Ortega Jr" → "Ortega". Double surnames with no particle
+   * ("García Lorca") can't be told from a middle name, so rosters can give the surname outright (Last name on stream).
    * Film Room uses the same rule (scoring.stream_last). The app and the overlay show names as the scorer page sends them.
    */
   function lastName(full) {
@@ -293,11 +293,14 @@
     KILL: { tier: 'statement', stat: 'kills', word: 'KILL!', label: 'KILL' },
     ACE: { tier: 'statement', stat: 'aces', word: 'ACE!', label: 'ACE' },
     MONSTER: { tier: 'statement', stat: 'blocks', word: 'MONSTER BLOCK!', label: 'MONSTER BLOCK' },
+    KONG: { tier: 'statement', stat: 'blocks', word: 'KONG!', label: 'ONE-HAND BLOCK' },     // hold Monster block
     TIP: { tier: 'point', stat: 'kills', label: 'TIP' },
     ROLL: { tier: 'point', stat: 'kills', label: 'ROLL SHOT' },
     DUMP: { tier: 'point', stat: 'kills', label: 'SETTER DUMP' },
     TOOL: { tier: 'point', stat: 'kills', label: 'TOOL' },
     BLOCK: { tier: 'point', stat: 'blocks', label: 'BLOCK' },
+    OVERPASS: { tier: 'point', stat: 'kills', label: 'OVERPASS PUNISHED' },   // hold Kill
+    JOUST: { tier: 'point', stat: 'kills', label: 'JOUST WON' },              // hold Tip
   };
   const playOf = kind => PLAYS[String(kind || '').toUpperCase()] || null;
 

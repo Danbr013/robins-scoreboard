@@ -18,8 +18,8 @@
   // has the rest; a point play (tip, roll, dump, tool, block) is only the tag, and is dropped after a short wait.
   const TAKEOVER_S = 2.1, STATEMENT_S = 5.6, POINT_S = 3.6, POINT_WAIT_S = 12;
   const KINDS = {
-    RUN: ['B', 4, 0, 9], TIED: ['B', 3, 0, 9], CORRECTED: ['B', 3, 0, 9], RUN_STOPPED: ['B', 4, 0, 9], SAVED: ['B', 4, 0, 9],
-    PLAY: ['A', STATEMENT_S, 30, 1], ICED: ['A', 4.6, 20, 1], MILESTONE: ['A', 5, 35, 1], SERVER: ['A', 4.5, 9, 5], SUB: ['A', 4.5, 20, 2],
+    RUN: ['B', 4, 0, 9], TIED: ['B', 3, 0, 9], CORRECTED: ['B', 3, 0, 9], RUN_STOPPED: ['B', 4, 0, 9], SAVED: ['B', 4, 0, 9], COMEBACK: ['B', 4.5, 0, 9],
+    PLAY: ['A', STATEMENT_S, 30, 1], ICED: ['A', 4.6, 20, 1], MILESTONE: ['A', 5, 35, 2], SERVER: ['A', 4.5, 9, 5], SUB: ['A', 4.5, 20, 2],
     SET_WON: ['C', 7, 30, 0], MATCH_WON: ['C', 20, 60, 0], SET_STATS: ['C', 12, 60, 4], SET_START: ['C', 6, 180, 7],
     TIMEOUT: ['C', 30, 0, 3], INTRO: ['C', 45, 0, 0], POTM: ['C', 15, 60, 4], SPONSOR: ['C', 7, 45, 6],
   };
@@ -89,7 +89,15 @@
     let situationKey = null, situationSince = 0;
     let paused = false, pausedSince = 0, introUp = false, nextSponsor = 0, sponsorCount = 0;
     let timeoutBy = null;      // the team whose timeout came last, until the next point
-    let lastPoint = null;      // what the latest point did, for its play: { side, set, home, away, at, run, saved, tie, wonSet, wonMatch, iced }
+    let lastPoint = null;      // what the latest point did, for its play: { side, set, home, away, at, run, saved, tie, wonSet, wonMatch, iced, comeback }
+    let serveRun = null;       // points in a row won on one server's serve: { side, number, name, count }
+    let aceRun = null;         // aces in a row by one server: { side, number, set, total, count }
+    let track = newTrack(0, false);   // this set: who has trailed, each side's worst deficit, comebacks told, monster blocks
+
+    function newTrack(set, fromStart) {
+      return { set, fromStart, trailed: { home: false, away: false }, worst: { home: null, away: null }, comeback: { home: false, away: false },
+        monsters: { home: [], away: [] } };
+    }
 
     function moment(kind, f) { return Object.assign({ kind, side: null, number: '', name: '', word: '', detail: '', count: 0, out: '', outName: '',
       setNumber: 0, home: 0, away: 0, sponsor: -1, until: 0, stats: null, seconds: seconds(kind), wait: maxWait(kind), statement: false, context: '',
@@ -103,11 +111,12 @@
     }
 
     function reset() { last = null; queue = []; active = null; tags = []; pops = {}; runSide = null; runLength = 0; situationKey = null; introUp = false;
-      timeoutBy = null; lastPoint = null; }
+      timeoutBy = null; lastPoint = null; serveRun = null; aceRun = null; track = newTrack(0, false); }
 
-    function pointChanges(prev, s, x, now) {
+    function pointChanges(prev, s, x, px, now) {
       const dh = s.home - prev.home, da = s.away - prev.away;
       const scorer = dh === 1 && da === 0 ? 'home' : da === 1 && dh === 0 ? 'away' : null;
+      if (track.set !== s.setNumber) track = newTrack(s.setNumber, prev.home + prev.away === 0);
       if (scorer) {
         pops[scorer] = now;
         tags = tags.filter(t => t.kind !== 'CORRECTED');
@@ -116,22 +125,64 @@
         if (active && (active.kind === 'TIMEOUT' || active.kind === 'SET_START')) active = null;   // play has begun
         queue = queue.filter(m => m.kind !== 'TIMEOUT' && m.kind !== 'SET_START' && m.kind !== 'SERVER');   // a new rally: old news
         const point = scored(prev, scorer, s.setNumber, s.home, s.away, now);
+        const served = serving(px, scorer);
+        const back = comeback(s, scorer);
         if (ended) tags = tags.filter(t => t.kind !== 'RUN');
-        // Set point saved, then a run stopped, then a run, then tied: the first one made shows (tags of the same moment).
+        // Set point saved, a comeback, a run stopped, a run, tied: the first one made shows (tags of the same moment).
         if (point.saved) tag(moment('SAVED', { side: scorer, word: point.saved + ' SAVED' }), now);
-        if (ended >= 5) tag(moment('RUN_STOPPED', { side: scorer, count: ended }), now);
+        if (back) { point.comeback = true; tag(moment('COMEBACK', { side: scorer, word: back }), now); }
+        if (ended >= 5 || served) {
+          tag(moment('RUN_STOPPED', { side: scorer, count: ended, number: served ? served.number : '', name: served ? served.name : '',
+            detail: served ? String(served.count) : '' }), now);
+        }
         if (runLength >= 3) {
           const srv = x.server && x.server.side === scorer && x.server.number ? x.server : null;
-          tag(moment('RUN', { side: scorer, number: srv ? srv.number : '', name: srv ? srv.name : '', count: runLength }), now);
+          const streak = serveRun && serveRun.side === scorer && serveRun.count >= 5 && (!srv || srv.number === serveRun.number) ? serveRun.count : 0;
+          tag(moment('RUN', { side: scorer, number: srv ? srv.number : streak ? serveRun.number : '', name: srv ? srv.name : streak ? serveRun.name : '',
+            count: runLength, detail: streak ? String(streak) : '' }), now);
         }
         const target = M.targetFor(s.format, s.setNumber);
         if (s.home === s.away && s.home >= target - 5) { point.tie = s.home; tag(moment('TIED', { count: s.home }), now); }
       } else if (dh < 0 || da < 0) {
-        runSide = null; runLength = 0; lastPoint = null; timeoutBy = null;
+        runSide = null; runLength = 0; lastPoint = null; timeoutBy = null; serveRun = null; aceRun = null;
         tag(moment('CORRECTED'), now);
       } else if (dh !== 0 || da !== 0) {
-        runSide = null; runLength = 0; lastPoint = null; timeoutBy = null;     // a jump (caught up after a reconnect): no animation
+        runSide = null; runLength = 0; lastPoint = null; timeoutBy = null; serveRun = null; aceRun = null;   // a jump (caught up after a reconnect): no animation
+        track.fromStart = false;
       }
+    }
+
+    /**
+     * Points won on one server's serve (the server is who the board before the point named). Returns the run that
+     * just ended when it was 5 or more ("#10 TOLLIVER SERVED 8 STRAIGHT").
+     */
+    function serving(px, scorer) {
+      const srv = px && px.server && px.server.number ? px.server : null;
+      if (!srv) { const end = serveRun && serveRun.side !== scorer && serveRun.count >= 5 ? serveRun : null; if (serveRun && serveRun.side !== scorer) serveRun = null; return end; }
+      if (srv.side === scorer) {
+        if (serveRun && serveRun.side === srv.side && serveRun.number === srv.number) serveRun.count++;
+        else serveRun = { side: srv.side, number: srv.number, name: srv.name, count: 1 };
+        return null;
+      }
+      const end = serveRun && serveRun.count >= 5 ? serveRun : null;
+      serveRun = null;
+      return end;
+    }
+
+    /** Who has trailed, and each side's worst deficit this set; the comeback line when a side down 5+ draws level or leads. */
+    function comeback(s, scorer) {
+      let line = '';
+      ['home', 'away'].forEach(side => {
+        const me = s[side], them = s[M.other(side)];
+        if (me < them) track.trailed[side] = true;
+        if (them - me >= 5 && (!track.worst[side] || them - me > track.worst[side].d)) track.worst[side] = { d: them - me, me, them };
+      });
+      const w = track.worst[scorer];
+      if (w && !track.comeback[scorer] && s[scorer] >= s[M.other(scorer)]) {
+        track.comeback[scorer] = true;
+        line = 'WAS DOWN ' + w.me + '\u2013' + w.them;
+      }
+      return line;
     }
 
     /** Notes what a point by [side] did (from the board before it), for the play the scorer enters next. */
@@ -147,25 +198,34 @@
     }
 
     /** The line a statement play adds about its point: SAVES SET POINT, 5–0 RUN, TIES IT 22–22… */
-    function contextFor(side, p, now) {
+    function contextFor(side, p, now, special) {
       const lp = lastPoint;
-      if (!lp || lp.side !== side || now - lp.at > CONTEXT_MS || !samePoint(lp, p)) return '';
+      if (!lp || lp.side !== side || now - lp.at > CONTEXT_MS || !samePoint(lp, p)) return special || '';
       if (lp.wonMatch) return 'WINS THE MATCH';
       if (lp.wonSet) return 'WINS SET ' + lp.wonSet;
       if (lp.saved) return 'SAVES ' + lp.saved;
+      if (special) return special;
+      if (lp.comeback) return 'COMEBACK';
       if (lp.tie) return 'TIES IT ' + lp.tie + '\u2013' + lp.tie;
       if (lp.run >= 3) return lp.run + '\u20130 RUN';
       return '';
+    }
+    /** The rally a play belongs to: { set, total } from the play, or the latest point by that side. */
+    function rallyOf(p, side, now) {
+      if (p && p.set > 0) return { set: p.set, total: (p.home | 0) + (p.away | 0) };
+      const lp = lastPoint;
+      return lp && lp.side === side && now - lp.at <= CONTEXT_MS ? { set: lp.set, total: lp.home + lp.away } : null;
     }
     /** A play from the scorer page names its rally (set and score after the point); older ones don't. */
     const samePoint = (lp, p) => !p || !(p.set > 0) || (p.set === lp.set && p.home === lp.home && p.away === lp.away);
 
     function setEnded(prev, s, x, now) {
       const lastSet = s.completedSets[s.completedSets.length - 1];
+      let pv = null;
       if (lastSet) {
         const winner = lastSet.home > lastSet.away ? 'home' : 'away';
         const n = s.completedSets.length;
-        const pv = prev.completedSets.length === n - 1 ? prev : null;   // the set's last point, not a jump
+        pv = prev.completedSets.length === n - 1 ? prev : null;   // the set's last point, not a jump
         if (pv && runSide !== winner) { runSide = winner; runLength = 0; }
         if (pv) runLength++;
         const point = scored(pv || s, winner, n, lastSet.home, lastSet.away, now);
@@ -173,15 +233,22 @@
         point.wonSet = n;
         point.wonMatch = !!s.matchOver;
       }
-      runSide = null; runLength = 0; tags = []; timeoutBy = null;
+      // Led wire to wire: the winner never trailed (only claimed when this set was followed from 0–0).
+      const setWinner = lastSet ? (lastSet.home > lastSet.away ? 'home' : 'away') : null;
+      const wire = !!pv && track.set === s.completedSets.length && track.fromStart && !track.trailed[setWinner];
+      runSide = null; runLength = 0; tags = []; timeoutBy = null; serveRun = null; aceRun = null;
+      track = newTrack(s.matchOver ? 0 : s.setNumber, !s.matchOver);
       if (s.matchOver) {
         queue = queue.filter(m => m.kind !== 'SET_START');
         if (active && active.kind === 'SET_START') active = null;
-        enqueue(moment('MATCH_WON', { side: M.matchWinner(s) }), now);
+        const winner = M.matchWinner(s);
+        // A sweep: every set to the winner (2 or more sets).
+        const sweep = !!winner && s.completedSets.length >= 2 && s.completedSets.every(x => (x.home > x.away ? 'home' : 'away') === winner);
+        enqueue(moment('MATCH_WON', { side: winner, detail: sweep ? 'SWEEP' : '' }), now);
         if (hasStats(x)) enqueue(moment('SET_STATS', { word: 'MATCH STATS', stats: [x.stats.home, x.stats.away] }), now);
       } else if (lastSet) {
         const n = s.completedSets.length;
-        enqueue(moment('SET_WON', { side: lastSet.home > lastSet.away ? 'home' : 'away', setNumber: n, home: lastSet.home, away: lastSet.away }), now);
+        enqueue(moment('SET_WON', { side: setWinner, setNumber: n, home: lastSet.home, away: lastSet.away, detail: wire ? 'LED WIRE TO WIRE' : '' }), now);
         if (hasStats(x)) enqueue(moment('SET_STATS', { word: 'AFTER SET ' + n, stats: [x.stats.home, x.stats.away] }), now);
         if (sponsorCount > 0) enqueueSponsor(now);
         enqueue(moment('SET_START', { side: s.serving || null, setNumber: s.setNumber, count: M.targetFor(s.format, s.setNumber),
@@ -214,11 +281,12 @@
       const fresh = s.setNumber === 1 && s.home === 0 && s.away === 0 && !s.completedSets.length && !s.matchOver;
       if (fresh && (prev.home + prev.away > 0 || prev.completedSets.length)) {
         queue = []; active = null; tags = []; runSide = null; runLength = 0;
+        timeoutBy = null; lastPoint = null; serveRun = null; aceRun = null; track = newTrack(1, true);
         return;
       }
       milestones(prevExtras, lastExtras, now);
       if (s.completedSets.length > prev.completedSets.length || (s.matchOver && !prev.matchOver)) setEnded(prev, s, lastExtras, now);
-      else if (s.setNumber === prev.setNumber) pointChanges(prev, s, lastExtras, now);
+      else if (s.setNumber === prev.setNumber) pointChanges(prev, s, lastExtras, prevExtras, now);
       if (s.serving && s.serving !== prev.serving && !s.matchOver && s.home + s.away > 0) {
         const srv = lastExtras.server;
         if (srv && srv.side === s.serving && srv.number) {
@@ -242,8 +310,23 @@
       if (play) {
         const pl = player(lastExtras, side, p.number || '');
         const statement = play.tier === 'statement';
-        enqueue(moment('PLAY', { side, number: p.number || '', name: p.name || '', word: kind, count: pl ? pl[play.stat] : 0, statement,
-          context: statement ? contextFor(side, p, now) : '', seconds: statement ? STATEMENT_S : POINT_S, wait: statement ? 30 : POINT_WAIT_S }), now);
+        const rally = rallyOf(p, side, now);
+        let special = '', party = false;
+        if (kind === 'ACE') {
+          // Back-to-back aces: the same server's aces on rallies in a row.
+          const same = aceRun && rally && aceRun.side === side && aceRun.number === (p.number || '') && aceRun.set === rally.set && rally.total === aceRun.total + 1;
+          aceRun = rally ? { side, number: p.number || '', set: rally.set, total: rally.total, count: same ? aceRun.count + 1 : 1 } : null;
+          if (aceRun && aceRun.count >= 2) special = aceRun.count === 2 ? 'BACK-TO-BACK ACES' : aceRun.count + ' STRAIGHT ACES';
+        }
+        if ((kind === 'MONSTER' || kind === 'KONG') && rally && rally.set === track.set) {
+          // Block party: two monster blocks within 5 rallies, or three in a set.
+          const list = track.monsters[side];
+          const near = list.length && rally.total - list[list.length - 1] <= 5;
+          list.push(rally.total);
+          if (near || list.length >= 3) { party = true; special = 'BLOCK PARTY'; }
+        }
+        enqueue(moment('PLAY', { side, number: p.number || '', name: p.name || '', word: kind, count: pl ? pl[play.stat] : 0, statement, party,
+          context: statement ? contextFor(side, p, now, special) : '', seconds: statement ? STATEMENT_S : POINT_S, wait: statement ? 30 : POINT_WAIT_S }), now);
       } else if (kind === 'SERVE_ERROR') {
         // The other team missed its serve. After this team's own timeout, that's the timeout icing the server.
         const lp = lastPoint;

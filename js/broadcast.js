@@ -233,7 +233,9 @@
       const m = tag.moment;
       if (m.kind === 'RUN' && m.side) {
         const run = M.name(s, m.side).toUpperCase() + ' ' + m.count + '–0 RUN';
-        const who = m.number ? ('#' + m.number + ' ' + (m.name || '').toUpperCase() + ' SERVING').replace(/\s+/g, ' ').trim() : '';
+        // A server who has held serve 5+ points in a row gets the streak: #10 TOLLIVER · 6 STRAIGHT ON SERVE.
+        const who = m.number ? ('#' + m.number + ' ' + (m.name || '').toUpperCase() + (m.detail ? '  \u00b7  ' + m.detail + ' STRAIGHT ON SERVE' : ' SERVING'))
+          .replace(/ +/g, ' ').trim() : '';
         const col = teamColor(st, m.side);
         sideTag(layout, m.side, run, who, col, textOn(col), tag.t, tag.length, baseY);
       } else if (m.kind === 'TIED') {
@@ -242,7 +244,12 @@
         centerTag('SCORE CORRECTED', GOLD, BLACK, tag.t, tag.length, baseY - 30);
       } else if (m.kind === 'RUN_STOPPED' && m.side) {
         const col = teamColor(st, m.side);
-        sideTag(layout, m.side, 'RUN STOPPED', 'ENDS A ' + m.count + '\u20130 RUN', col, textOn(col), tag.t, tag.length, baseY);
+        const sub = m.detail ? ('#' + m.number + ' ' + (m.name || '').toUpperCase() + ' SERVED ' + m.detail + ' STRAIGHT').replace(/ +/g, ' ')
+          : 'ENDS A ' + m.count + '\u20130 RUN';
+        sideTag(layout, m.side, 'RUN STOPPED', sub, col, textOn(col), tag.t, tag.length, baseY);
+      } else if (m.kind === 'COMEBACK' && m.side) {
+        const col = teamColor(st, m.side);
+        sideTag(layout, m.side, 'COMEBACK', m.word, col, textOn(col), tag.t, tag.length, baseY);
       } else if (m.kind === 'SAVED') {
         centerTag(m.word, GOLD, BLACK, tag.t, tag.length, baseY - 30);
       }
@@ -250,8 +257,10 @@
 
     function sideTag(layout, side, word, sub, bg, ink, t, length, bottom) {
       font('d', 24); const wordW = measure(word);
-      font('c', 15); const subW = sub ? measure(sub) + 14 : 0;
-      const w = Math.min(wordW + subW + 28, 300), h = 28;
+      font('c', 15); let subW = sub ? measure(sub) + 14 : 0;
+      const w = Math.min(wordW + subW + 28, 440), h = 28;
+      let subSize = 15;
+      if (sub && wordW + subW + 28 > w) { subSize = fitText(sub, 15, w - 42 - wordW, 'c'); font('c', subSize); subW = measure(sub) + 14; }
       const left = layout !== 'bar' ? CENTER_X - w / 2 : side === 'home' ? CENTER_X - 120 - w : CENTER_X + 120;
       const p = Math.min(clamp(t / 0.3, 0, 1), clamp((length - t) / 0.3, 0, 1));
       if (p <= 0) return;
@@ -263,7 +272,7 @@
       const size = fitText(word, 24, w - 20 - subW, 'd');
       font('d', size);
       text(word, left + 12, baseline(top, h) + 1, 'd', size, ink);
-      if (sub) { font('c', 15); text(sub, left + 12 + wordW + 14, baseline(top, h), 'c', 15, ink, 'left', 210 / 255); }
+      if (sub) { font('c', subSize); text(sub, left + 12 + wordW + 14, baseline(top, h), 'c', subSize, ink, 'left', 210 / 255); }
       c.restore();
     }
 
@@ -316,7 +325,7 @@
         const ls = fitText(label, 13, extRight - 14 - x, 'c');
         text(label, x, extTop + 17, 'c', ls, ink, 'left', 210 / 255);
         spacing(0, 13);
-        // The scorer page sends the name as it goes on the video (the surname: Del Sordo, Criado Marrero); never cut it again.
+        // The scorer page sends the name as it goes on the video (the whole surname: Del Toro, García Lorca); never cut it again.
         const who = (String(m.name || '').trim() || M.name(s, m.side)).toUpperCase();
         const size = fitText(who, 30, extRight - (home ? 16 : 12) - x, 'd');
         text(who, x, extTop + BAR_H - 9, 'd', size, ink);
@@ -427,7 +436,7 @@
       const play = M.playOf(m.word) || { word: m.word + '!' };
       const color = teamColor(st, m.side), ink = textOn(color);
       const home = m.side === 'home', dir = home ? 1 : -1;
-      const monster = m.word === 'MONSTER', ace = m.word === 'ACE';
+      const monster = m.word === 'MONSTER' || m.word === 'KONG', ace = m.word === 'ACE';
       // The kill and ace bands fly in from the team's own side; the monster block comes down like a roof.
       const inP = monster ? easeIn(t / 0.22) : easeOut(t / 0.28);
       const outP = easeIn((t - (L - 0.34)) / 0.34);
@@ -519,9 +528,75 @@
       }
       if (monster) impact(t, bh);
       c.restore();
+      // Block party: confetti over it all.
+      if (m.party) confetti(t - 0.2, 31, [GOLD, CREAM, color], 70, L - 0.2);
       // A flash on impact (above the bar only).
       const fp = (t - hit) / 0.16;
       if (fp >= 0 && fp <= 1) { c.globalAlpha = (monster ? 0.36 : 0.28) * (1 - fp); fillRect(0, 0, W, BAR_Y - 16, '#FFFFFF'); c.globalAlpha = 1; }
+    }
+
+    /** Confetti falling from the top (seeded, so it falls the same way every time), fading out by [until]. */
+    function confetti(t, seed, colors, count, until) {
+      if (t < 0) return;
+      const r = rng(seed), fade = clamp((until - t) / 0.8, 0, 1);
+      if (fade <= 0) return;
+      for (let i = 0; i < count; i++) {
+        const x0 = r() * W, delay = r() * 0.7, vy = 170 + r() * 260, amp = 18 + r() * 40, freq = 3 + r() * 4, phase = r() * 6.28;
+        const pw = 7 + r() * 7, ph = 3 + r() * 4, spin = (r() - 0.5) * 9, flip = 5 + r() * 7;
+        const q = t - delay;
+        if (q < 0) continue;
+        const y = -20 + vy * q;
+        if (y > BAR_Y - 10) continue;
+        c.save();
+        c.translate(x0 + Math.sin(q * freq + phase) * amp, y);
+        c.rotate(spin * q);
+        c.scale(1, Math.max(0.15, Math.abs(Math.cos(q * flip + phase))));
+        c.globalAlpha = fade;
+        fillRect(-pw / 2, -ph / 2, pw, ph, colors[i % colors.length]);
+        c.restore();
+      }
+    }
+
+    /** The final: confetti in the winner's colors, and for a sweep a broom across the panel and a SWEEP tab. */
+    function celebrate(s, st, shown, layout) {
+      const m = shown.moment, t = shown.t;
+      if (!m.side) return;
+      const color = teamColor(st, m.side);
+      confetti(t - 0.4, 77, [GOLD, CREAM, color, darker(color, 0.7)], 110, 6);
+      if (m.detail !== 'SWEEP') return;
+      const w = PANEL_SIZES.MATCH_WON[0], h = PANEL_SIZES.MATCH_WON[1];
+      const bottom = layout === 'bar' ? BAR_Y - 12 : H - 60, x = CENTER_X - w / 2, y = bottom - h;
+      const q = (t - 0.7) / 1.2;
+      if (q >= 0 && q <= 1) {
+        const bx = x - 120 + (w + 240) * easeInOut(q), by = y + 23;
+        // Dust kicked up behind the broom.
+        const r = rng(5);
+        for (let i = 0; i < 26; i++) {
+          const back = r() * 160, rise = r() * 34, size = 2 + r() * 4;
+          c.globalAlpha = 0.55 * (1 - back / 160);
+          circle(bx - 30 - back, by + 18 - rise * (back / 160), size, CREAM);
+        }
+        c.globalAlpha = 1;
+        c.save();
+        c.translate(bx, by);
+        c.rotate(-0.5 + 0.12 * Math.sin(q * 26));     // the broom swishes as it goes
+        fillRect(-4, -96, 8, 92, '#8B5A2B');            // handle
+        fillRect(-14, -10, 28, 10, '#5C3A1A');          // binding
+        c.fillStyle = '#D9A441';
+        c.beginPath(); c.moveTo(-14, 0); c.lineTo(14, 0); c.lineTo(30, 46); c.lineTo(-30, 46); c.closePath(); c.fill();
+        c.strokeStyle = 'rgba(92,58,26,0.7)'; c.lineWidth = 1.5;
+        for (let k = -3; k <= 3; k++) { c.beginPath(); c.moveTo(k * 4, 2); c.lineTo(k * 8.5, 45); c.stroke(); }
+        c.restore();
+      }
+      const pop = easeOutBack((t - 1.8) / 0.3);
+      if (pop > 0) {
+        const tw = 170, th = 40, tx = x + w - tw - 20, ty = y - th + 4;
+        c.save();
+        c.translate(tx + tw / 2, ty + th / 2); c.scale(pop, pop); c.translate(-(tx + tw / 2), -(ty + th / 2));
+        fillRR(tx, ty, tw, th + 8, 8, GOLD);
+        centered('SWEEP', 'd', 34, BLACK, tx + tw / 2, ty, th, tw - 20);
+        c.restore();
+      }
     }
 
     /** A kill: speed streaks across the band, the way the ball went. */
@@ -761,7 +836,7 @@
       c.save();
       clip(x - 4, bottom - (h + 8) * open, w + 8, (h + 8) * open + 4);
       if (m.kind === 'SET_WON') setWon(s, st, x, y, w, h, m);
-      else if (m.kind === 'MATCH_WON') matchWon(s, st, x, y, w, h, m);
+      else if (m.kind === 'MATCH_WON') matchWon(s, st, x, y, w, h, m, shown.t);
       else if (m.kind === 'SET_STATS') setStats(s, st, x, y, w, h, m);
       else if (m.kind === 'SET_START') setStart(x, y, w, h, m);
       else if (m.kind === 'TIMEOUT') timeout(s, st, x, y, w, h, m, countdown, shown.t);
@@ -791,10 +866,17 @@
       const title = M.name(s, side).toUpperCase() + ' TAKE SET ' + m.setNumber;
       const size = fitText(title, 64, x + w - 60 - scoreW - (pl.x + pl.w + 24), 'd');
       font('d', size);
-      text(title, pl.x + pl.w + 24, baseline(y, h - 6) + 2, 'd', size, ink);
+      if (!m.detail) { text(title, pl.x + pl.w + 24, baseline(y, h - 6) + 2, 'd', size, ink); return; }
+      // LED WIRE TO WIRE: the title moves up for a gold line under it.
+      text(title, pl.x + pl.w + 24, baseline(y - 14, h - 6) + 2, 'd', size, ink);
+      font('c', 24); spacing(0.1, 24);
+      const dw = measure(m.detail) + 26;
+      fillRR(pl.x + pl.w + 24, y + h - 46, dw, 30, 6, GOLD);
+      text(m.detail, pl.x + pl.w + 37, baseline(y + h - 46, 30) + 1, 'c', 24, BLACK);
+      spacing(0, 24);
     }
 
-    function matchWon(s, st, x, y, w, h, m) {
+    function matchWon(s, st, x, y, w, h, m, t) {
       darkPanel(x, y, w, h);
       const winner = m.side;
       const color = winner ? teamColor(st, winner) : GOLD;
@@ -1222,10 +1304,12 @@
           if (f.extension) drawExtension(s, st, f.extension, 'bar');
         }
         if (f.panel) drawPanel(s, st, f.panel, 'bar', countdown);
+        if (f.panel && f.panel.kind === 'MATCH_WON') celebrate(s, st, f.panel, 'bar');
       } else {
         drawTags(s, st, f, 'box');
         if (f.extension && f.extension.kind !== 'PLAY') drawExtension(s, st, f.extension, 'box');
         if (f.panel) drawPanel(s, st, f.panel, 'box', countdown);
+        if (f.panel && f.panel.kind === 'MATCH_WON') celebrate(s, st, f.panel, 'box');
       }
       c = null;
     }

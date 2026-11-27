@@ -621,25 +621,30 @@
       accept(first);
       status.textContent = 'Demo';
       const step = function (s) { const b = JSON.parse(JSON.stringify(board)); b.match = Object.assign(b.match, s); accept({ ok: true, now: Date.now(), board: b }); };
+      // For scripted previews (test/reel.js): change the demo board and send plays as the scorer page would.
+      const history = [];
+      const send = function (b) { accept({ ok: true, now: Date.now(), board: b }); };
+      window.RobinsDemo = {
+        match: () => board.match,
+        point: function (side, fields) {   // fields (server, stats…) go in the same save, as the scorer page sends them
+          history.push(board.match); const r = M.point(board.match, side); step(Object.assign({}, r.state, fields || {})); return r.type;
+        },
+        undo: function () { if (history.length) { const b = JSON.parse(JSON.stringify(board)); b.match = history.pop(); send(b); } },
+        timeout: function (side) { step(M.timeout(board.match, side).state); },
+        patch: function (fields) { const b = JSON.parse(JSON.stringify(board)); Object.assign(b.match, fields); send(b); },
+        card: function (c) { const b = JSON.parse(JSON.stringify(board)); b.card = c ? Object.assign({ title: '', message: '', seconds: 0, at: Date.now() }, c) : null; send(b); },
+        play: function (p) {
+          const s = board.match;
+          director.event(Object.assign({ set: s.setNumber, home: s.home, away: s.away, at: Date.now(), number: '', name: '' }, p), Date.now());
+          kick();
+        },
+      };
       setTimeout(function () {
         const what = params.get('do');
         let s = board.match;
         if (what === 'point') step(M.point(s, 'home').state);
         if (what === 'run') for (let i = 0; i < 4; i++) { s = M.point(s, 'home').state; step(s); }
         if (what === 'timeout') step(M.timeout(s, 'away').state);
-        if (what === 'reel') {   // every play tier and ICED in about 29 s, for previews over real footage
-          const play = (at, kind, side, num, name) => setTimeout(function () {
-            director.event({ kind, side, number: num, name, set: s.setNumber, home: s.home, away: s.away, at: Date.now() }, Date.now()); kick(); }, at);
-          const pt = (at, side) => setTimeout(function () { step(s = M.point(s, side).state); }, at);
-          board.match.stats.home.players = { 10: { name: 'Tolliver', kills: 4 }, 43: { name: 'Del Sordo', kills: 3 }, 18: { name: 'Okafor', aces: 2 } };
-          board.match.stats.away.players = { 4: { name: 'Ramirez', blocks: 2 } };
-          pt(300, 'home'); play(700, 'KILL', 'home', '10', 'Tolliver');
-          pt(6500, 'home'); play(6900, 'ROLL', 'home', '43', 'Del Sordo');
-          pt(10700, 'home'); play(11100, 'ACE', 'home', '18', 'Okafor');
-          pt(16900, 'away'); play(17300, 'MONSTER', 'away', '4', 'Ramirez');
-          setTimeout(function () { step(s = M.timeout(s, 'home').state); }, 22900);
-          pt(24200, 'home'); play(24600, 'SERVE_ERROR', 'home', '', '');
-        }
         if (what === 'iced') {   // the home team calls a timeout, the away server misses the next serve
           s = M.setServing(s, 'away').state; step(s);
           s = M.timeout(s, 'home').state; step(s);

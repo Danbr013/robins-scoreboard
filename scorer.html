@@ -86,12 +86,15 @@
   #how .tier.t2 button { padding: 11px 2px; font-size: 15px; }
   #how .tier.t3 button { padding: 10px 2px; font-size: 15px; background: #26262e; color: #d8d4cc; }
   #how .tier.t3 button.x { flex: 0 0 54px; }
+  #how .hint { font-size: 12px; opacity: .55; margin: 8px 4px 0; line-height: 1.35; }
+  #how button.held { outline: 3px solid var(--cream, #FAF6ED); }
   .slots { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin: 6px 0 4px; }
   .slot { border: 1px solid var(--line); background: var(--panel); border-radius: 10px; padding: 6px 2px; text-align: center; min-height: 62px; }
   .slot small { display: block; font-size: 11px; opacity: .6; letter-spacing: .08em; }
   .slot b { display: block; font-family: 'Bebas Neue', sans-serif; font-size: 30px; font-weight: 400; line-height: 1.05; }
   .slot.serving { border-color: var(--gold); box-shadow: inset 0 0 0 1px var(--gold); }
-  #how button { border: 0; border-radius: 12px; padding: 16px 2px; font-size: 18px; font-weight: 700; background: var(--panel2); }
+  #how button { border: 0; border-radius: 12px; padding: 16px 2px; font-size: 18px; font-weight: 700; background: var(--panel2);
+    -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; touch-action: manipulation; }
   #how button.k { background: var(--gold); color: var(--black); }
   #tobar { position: fixed; left: 10px; right: 10px; top: calc(env(safe-area-inset-top) + 44px); background: #101014; border: 1px solid #33333c;
     border-radius: 16px; padding: 10px; z-index: 16; box-shadow: 0 12px 32px rgba(0,0,0,.65); }
@@ -168,12 +171,12 @@
   <div class="q" id="howQ">How did they score?</div>
   <!-- Statement plays take the whole screen; point plays get a tag on the bar; errors only change the score. -->
   <div class="tier t1">
-    <button class="k" data-act="how" data-kind="KILL">Kill</button>
+    <button class="k" data-act="how" data-kind="KILL" data-hold="OVERPASS">Kill</button>
     <button class="k" data-act="how" data-kind="ACE" id="howAce">Ace</button>
-    <button class="k" data-act="how" data-kind="MONSTER">Monster block</button>
+    <button class="k" data-act="how" data-kind="MONSTER" data-hold="KONG">Monster block</button>
   </div>
   <div class="tier t2">
-    <button data-act="how" data-kind="TIP">Tip</button>
+    <button data-act="how" data-kind="TIP" data-hold="JOUST">Tip</button>
     <button data-act="how" data-kind="ROLL">Roll</button>
     <button data-act="how" data-kind="DUMP">Dump</button>
     <button data-act="how" data-kind="TOOL">Tool</button>
@@ -184,6 +187,7 @@
     <button data-act="how" data-kind="OPP_ERROR">Their error</button>
     <button class="x" data-act="howclose">✕</button>
   </div>
+  <div class="hint">Hold Kill for an overpass kill · hold Tip for a joust won · hold Monster block for a one-hand block (Kong)</div>
 </div>
 
 <!-- After a timeout: put the timeout screen up? -->
@@ -1130,7 +1134,25 @@
 
   // ---------------------------------------------------------------- how the point was won
   const KIND_LABEL = { KILL: 'Kill', ACE: 'Ace', MONSTER: 'Monster block', TIP: 'Tip', ROLL: 'Roll shot', DUMP: 'Setter dump', TOOL: 'Tool',
-    BLOCK: 'Block', SERVE_ERROR: 'Missed serve', OPP_ERROR: 'Opponent error' };
+    BLOCK: 'Block', SERVE_ERROR: 'Missed serve', OPP_ERROR: 'Opponent error', KONG: 'Kong (one-hand block)', OVERPASS: 'Overpass kill', JOUST: 'Joust won' };
+
+  // Holding Kill, Tip or Monster block picks its extra (overpass kill, joust won, one-hand block).
+  let holdTimer = null, holdFired = 0;
+  const HOLD_MS = 550;
+  $('how').addEventListener('pointerdown', e => {
+    const b = e.target.closest('[data-hold]');
+    if (!b) return;
+    clearTimeout(holdTimer);
+    holdTimer = setTimeout(() => {
+      holdFired = Date.now();
+      b.classList.add('held');
+      if (navigator.vibrate) navigator.vibrate([20, 40, 20]);
+      setTimeout(() => b.classList.remove('held'), 300);
+      chooseKind(b.dataset.hold);
+    }, HOLD_MS);
+  });
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => $('how').addEventListener(ev, () => clearTimeout(holdTimer)));
+  $('how').addEventListener('contextmenu', e => { if (e.target.closest('[data-hold]')) e.preventDefault(); });
 
   function askHow(side, eventIndex, canAce) {
     const ev = events[eventIndex] || {};
@@ -1173,7 +1195,7 @@
     Object.keys(res.lastNames || {}).forEach(k => { if (res.lastNames[k]) LAST[nameKey(k)] = res.lastNames[k]; });
     (res.league || []).forEach(r => { if (r[5]) LAST[nameKey(r[3])] = r[5]; });
   }
-  /** The name on the video: the roster's surname when it gives one, else the surname rule (Del Sordo, De La Cruz…). */
+  /** The name on the video: the roster's surname when it gives one, else the surname rule (Del Toro, De La Rosa…). */
   function short(name) { return LAST[nameKey(name)] || M.lastName(name); }
 
   /** The players for one side: Robins from the Robins Rosters tab, everyone else from League Rosters. */
@@ -1270,7 +1292,7 @@
 
   $('playerList').addEventListener('click', e => {
     const b = e.target.closest('[data-player]');
-    if (!b) return;
+    if (!b || Date.now() - holdFired < 800) return;   // the finger that held a play button lifting over the list
     const p = $('playerList')._list[Number(b.dataset.player)];
     picked(p.num, p.name);
   });
@@ -1486,7 +1508,7 @@
       case 'undo': undo(); break;
       case 'setup': openSetup(); break;
       case 'menu': $('overlayUrl').textContent = overlayLink(); fillCardControls(); drawCameraQr(); show('menu'); break;
-      case 'how': chooseKind(b.dataset.kind); break;
+      case 'how': if (Date.now() - holdFired > 800) chooseKind(b.dataset.kind); break;   // not the click that ends a hold
       case 'howclose': closeHow(); break;
       case 'toscreen': showTimeoutScreen(); break;
       case 'toclose': closeTimeoutBar(); break;
