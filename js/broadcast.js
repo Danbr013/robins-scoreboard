@@ -118,8 +118,13 @@
 
     // ---------------------------------------------------------------- the bar
     const extOpen = (t, len) => Math.min(easeOut(t / 0.35), easeOut((len - t) / 0.3));
-    /** How far the bar has slid left so bar + extension stay centred. */
-    function barShift(f) { return f && f.extension ? -EXT_W / 2 * extOpen(f.extension.t, f.extension.length) : 0; }
+    /** How far the bar has slid so bar + extension stay centred: right for the home team's (it grows out of the left
+     *  end), left for the away team's. */
+    function barShift(f) {
+      if (!f || !f.extension) return 0;
+      const d = EXT_W / 2 * extOpen(f.extension.t, f.extension.length);
+      return f.extension.moment.side === 'home' ? d : -d;
+    }
 
     function drawBar(s, st, f) {
       c.save();
@@ -265,15 +270,18 @@
       const open = extOpen(t, len);
       const panelOpen = Math.min(easeOut((t - 0.3) / 0.35), easeOut((len - 0.25 - t) / 0.3));
       const bar = layout === 'bar';
-      const extLeft = bar ? BAR_X + BAR_W - 2 - EXT_W / 2 * open : W - 40 - EXT_W;
+      const home = m.side === 'home';     // the home team's grows out of the bar's left end, the away team's the right
+      const extLeft = bar ? (home ? BAR_X + 2 + EXT_W / 2 * open - EXT_W : BAR_X + BAR_W - 2 - EXT_W / 2 * open) : (home ? 40 : W - 40 - EXT_W);
       const extTop = bar ? BAR_Y : BOX_BOTTOM - BAR_H;
       const extRight = extLeft + EXT_W;
       if (open > 0) {
         c.save();
-        clip(extLeft, extTop - 1, EXT_W * open, BAR_H + 2);
-        c.fillStyle = hgrad(extLeft, extRight, [darker(color, 0.8), color]);
-        rr(extLeft - 8, extTop, EXT_W + 8, BAR_H, 6); c.fill();
-        fillRect(extLeft, extTop, 4, BAR_H, GOLD);
+        if (home) clip(extRight - EXT_W * open, extTop - 1, EXT_W * open, BAR_H + 2);
+        else clip(extLeft, extTop - 1, EXT_W * open, BAR_H + 2);
+        c.fillStyle = hgrad(extLeft, extRight, home ? [color, darker(color, 0.8)] : [darker(color, 0.8), color]);
+        if (home) rr(extLeft, extTop, EXT_W + 8, BAR_H, 6); else rr(extLeft - 8, extTop, EXT_W + 8, BAR_H, 6);
+        c.fill();
+        fillRect(home ? extRight - 4 : extLeft, extTop, 4, BAR_H, GOLD);
         let x = extLeft + 12;
         if (m.number) {
           fillRR(x, extTop + 6, 50, BAR_H - 12, 5, CREAM);
@@ -285,13 +293,13 @@
         text(label, x, extTop + 17, 'c', 13, ink, 'left', 210 / 255);
         spacing(0, 13);
         const who = ((m.kind === 'SUB' ? m.name : lastWord(m.name)) || M.name(s, m.side)).toUpperCase();
-        const size = fitText(who, 30, extRight - 12 - x, 'd');
+        const size = fitText(who, 30, extRight - (home ? 16 : 12) - x, 'd');
         text(who, x, extTop + BAR_H - 9, 'd', size, ink);
         c.restore();
       }
       const panelH = m.kind === 'SERVER' ? (m.detail ? 84 : 0) : m.kind === 'SUB' ? 124 : PANEL_H;
       if (panelOpen <= 0 || panelH <= 0) return;
-      const right = extRight, left = right - PANEL_W, bottom = extTop - 8, top = bottom - panelH;
+      const left = home ? extLeft : extRight - PANEL_W, right = left + PANEL_W, bottom = extTop - 8, top = bottom - panelH;
       c.save();
       clip(left, bottom - panelH * panelOpen, PANEL_W, panelH * panelOpen);
       if (m.kind === 'PLAY') drawPlayPanel(left, top, PANEL_W, panelH, m, color, ink, t, st);

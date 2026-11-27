@@ -10,13 +10,17 @@
   'use strict';
   const M = root.RobinsMatch || (typeof require === 'function' ? require('./match.js') : null);
 
-  // kind: [slot, seconds, maxWaitSeconds, priority]
+  // kind: [slot, seconds, maxWaitSeconds, priority]. A timeout comes after the plays already waiting, lasts until
+  // 30 s after the call (no longest wait) and steps aside for a play or sub that arrives while it is up.
   const KINDS = {
     RUN: ['B', 4, 0, 9], TIED: ['B', 3, 0, 9], CORRECTED: ['B', 3, 0, 9],
-    PLAY: ['A', 5, 20, 1], MILESTONE: ['A', 5, 25, 1], SERVER: ['A', 4.5, 9, 5], SUB: ['A', 4.5, 15, 2],
-    SET_WON: ['C', 7, 30, 0], MATCH_WON: ['C', 20, 60, 0], SET_STATS: ['C', 12, 60, 3], SET_START: ['C', 6, 180, 7],
-    TIMEOUT: ['C', 30, 5, 0], INTRO: ['C', 30, 0, 0], POTM: ['C', 15, 60, 3], SPONSOR: ['C', 7, 45, 6],
+    PLAY: ['A', 5, 30, 1], MILESTONE: ['A', 5, 35, 1], SERVER: ['A', 4.5, 9, 5], SUB: ['A', 4.5, 20, 2],
+    SET_WON: ['C', 7, 30, 0], MATCH_WON: ['C', 20, 60, 0], SET_STATS: ['C', 12, 60, 4], SET_START: ['C', 6, 180, 7],
+    TIMEOUT: ['C', 30, 0, 3], INTRO: ['C', 30, 0, 0], POTM: ['C', 15, 60, 4], SPONSOR: ['C', 7, 45, 6],
   };
+  const OVER_TIMEOUT = ['PLAY', 'MILESTONE', 'SUB'];
+  /** Plays still go on after a break card up to this long; after a longer break they're old news. */
+  const BREAK_KEEPS_PLAYS = 90000;
   const slot = k => KINDS[k][0];
   const seconds = k => KINDS[k][1];
   const maxWait = k => KINDS[k][2];
@@ -72,7 +76,7 @@
     let pops = {};
     let runSide = null, runLength = 0;
     let situationKey = null, situationSince = 0;
-    let paused = false, introUp = false, nextSponsor = 0, sponsorCount = 0;
+    let paused = false, pausedSince = 0, introUp = false, nextSponsor = 0, sponsorCount = 0;
 
     function moment(kind, f) { return Object.assign({ kind, side: null, number: '', name: '', word: '', detail: '', count: 0, out: '', outName: '',
       setNumber: 0, home: 0, away: 0, sponsor: -1, until: 0, stats: null, seconds: seconds(kind), queuedAt: 0, startedAt: 0, notBefore: 0 }, f || {}); }
@@ -195,7 +199,14 @@
       }
       if (!intro && introUp && active && active.kind === 'INTRO') active = null;
       introUp = intro;
-      paused = !!type && !intro;
+      const nowPaused = !!type && !intro;
+      if (nowPaused && !paused) pausedSince = now;
+      if (!nowPaused && paused) {
+        // The break card held the queue: that time doesn't count against the plays waiting (unless it was a long break).
+        const held = now - pausedSince;
+        if (held >= 0 && held <= BREAK_KEEPS_PLAYS) queue.forEach(m => { m.queuedAt += held; if (m.notBefore) m.notBefore += held; });
+      }
+      paused = nowPaused;
     }
 
     function frame(now) {
@@ -205,6 +216,12 @@
         if (now >= end && !(a.kind === 'INTRO' && introUp && now - a.startedAt < 30000)) active = null;
         if (a.kind === 'INTRO' && now - a.startedAt >= 30000) active = null;
       }
+      // A play or sub that arrives during the timeout panel goes on now; the timeout comes back after it.
+      if (active && active.kind === 'TIMEOUT' && !paused && active.until - now > 3000 &&
+          queue.some(m => now >= m.notBefore && OVER_TIMEOUT.indexOf(m.kind) >= 0)) {
+        queue.push(active);
+        active = null;
+      }
       if (!active && !paused) {
         queue = queue.filter(m => !(maxWait(m.kind) > 0 && now - m.queuedAt > maxWait(m.kind) * 1000));
         let next = null;
@@ -212,7 +229,7 @@
         if (next) {
           queue = queue.filter(m => m !== next);
           next.startedAt = now;
-          if (!(next.kind === 'TIMEOUT' && next.until <= now)) active = next;
+          if (!(next.kind === 'TIMEOUT' && next.until - now < 3000)) active = next;   // too little time left to show
         }
       }
       tags = tags.filter(t => now - t.startedAt <= t.seconds * 1000);

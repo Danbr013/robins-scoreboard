@@ -393,7 +393,7 @@
   let playOnAirAt = 0;         // when the service took the last play we sent
   let pumpTimer = null;
   const PLAY_GAP = 5600;       // time each play gets on the video (the animation runs 4.4 s; overlays check every second)
-  const PLAY_MAX_WAIT = 60000; // plays waiting longer than this are dropped as stale
+  const PLAY_MAX_WAIT = 120000; // plays waiting longer than this are dropped as stale (a 30 s timeout screen holds them)
   let toTimer = null, toCardTimer = null;
   const plateCache = {};       // logo id → plate color
 
