@@ -262,7 +262,7 @@
     const comma = text.indexOf(',');
     if (comma >= 0) {
       const before = text.slice(0, comma).trim(), after = text.slice(comma + 1).trim();
-      // "Faapaia, Ioane": surname first. ("Smith, Jr." is just a suffix.)
+      // "Ortega, Juan": surname first. ("Smith, Jr." is just a suffix.)
       if (before && after && !/^(jr\.?|sr\.?|ii|iii|iv)$/i.test(after)) return before.split(/\s+/).join(' ');
       text = before || after;
     }
@@ -274,25 +274,40 @@
     return words.slice(i).join(' ');
   }
 
-  /** The nickname a roster gives in quotes: "Marcus “Moe” Hargrove" → "Moe"; '' when there is none. */
-  function nickname(full) {
-    const m = /[“"]([^”"]+)[”"]/.exec(String(full || ''));
-    return m ? m[1].replace(/\s+/g, ' ').trim() : '';
+  const SUFFIX = /^(jr\.?|sr\.?|ii|iii|iv)$/i;
+
+  /**
+   * The first name as the roster has it: "Ana “Ani” Del Toro" → "Ana", "Ortega, Juan" → "Juan",
+   * "Juan Carlos Ortega Jr" → "Juan". Nicknames in quotes and notes in parentheses are left out; '' when the roster
+   * gives only a surname. last: the surname the roster gives outright, if any.
+   */
+  function firstName(full, last) {
+    let text = String(full || '').replace(/[“"][^”"]*[”"]/g, ' ').replace(/\([^)]*\)/g, ' ').replace(/\s+-\s+/g, '-');
+    const comma = text.indexOf(',');
+    if (comma >= 0) {
+      const before = text.slice(0, comma).trim(), after = text.slice(comma + 1).trim();
+      if (before && after && !SUFFIX.test(after)) return after.split(/\s+/)[0];
+      text = before || after;
+    }
+    const words = text.trim().split(/\s+/).filter(Boolean);
+    while (words.length > 1 && SUFFIX.test(words[words.length - 1])) words.pop();
+    const sur = String(last || lastName(full)).split(/\s+/).filter(Boolean);
+    if (!words.length || !sur.length) return words[0] || '';
+    const low = a => a.join(' ').toLowerCase();
+    const atEnd = words.length >= sur.length && low(words.slice(words.length - sur.length)) === low(sur);
+    const rest = atEnd ? words.length - sur.length : (words[0].toLowerCase() === sur[0].toLowerCase() ? 0 : words.length);
+    return rest > 0 ? words[0] : '';
   }
 
   /**
-   * The name on a play card or tag: the nickname with the surname when the roster gives one ("Moe Hargrove"),
-   * else the surname alone ("Del Toro"). last: the surname the roster gives outright, if any.
-   * Film Room uses the same rule (scoring.stream_name).
+   * The name on the video: first name and surname as the roster has them ("Ana “Ani” Del Toro" → "Ana Del Toro",
+   * "Marcus Lee Garcia Lorca" with the surname Garcia Lorca → "Marcus Garcia Lorca"). Play cards, tags and player of
+   * the match all use it. last: the surname the roster gives outright, if any. Film Room uses the same rule
+   * (scoring.stream_name).
    */
   function streamName(full, last) {
-    const sur = last || lastName(full), nick = nickname(full);
-    return nick && sur ? nick + ' ' + sur : sur || nick;
-  }
-
-  /** The whole name for player of the match, nickname kept: 'Marcus “Moe” Hargrove' (straight quotes made curly). */
-  function fullName(full) {
-    return String(full || '').replace(/"([^"]+)"/g, '“$1”').replace(/\s+/g, ' ').trim();
+    const sur = last || lastName(full);
+    return [firstName(full, sur), sur].filter(Boolean).join(' ');
   }
 
   /** True for a complete match state (guards against old or damaged saved boards). */
@@ -330,7 +345,7 @@
     PRESETS, CAP_CHOICES, TIMEOUT_CHOICES, isValid, DEFAULT_FORMAT, normFormat, presetFor, capFor, timeoutLimit, timeoutsLeft,
     other, setsToWin, targetFor, isSetWon, formatLabel, formatWords, sameFormat,
     newMatch, point, removePoint, setServing, timeout, rename,
-    points, name, timeouts, setsWon, situation, matchWinner, bannerFor, textOn, luminance, lastName, nickname, streamName, fullName,
+    points, name, timeouts, setsWon, situation, matchWinner, bannerFor, textOn, luminance, lastName, firstName, streamName,
   };
   root.RobinsMatch = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
